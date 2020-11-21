@@ -178,7 +178,7 @@ class LatticePath(ClonableIntArray):
             else Rational((self.width - len(self.rises) - len(self.valleys)) /
                           (self.height - len(self.rises) - len(self.valleys)))
         # It's the disance between the main diagonal and the base diagonal.
-        self.shift = - min(self.area_word()) if self.length > 0 else 0
+        self.shift = - min(self.area_word()) if self.height > 0 else 0
         # It's the area word of the path, as list.
         self.aword = self.area_word()
         # Instruction on how to draw the path in LaTeX.
@@ -251,7 +251,25 @@ class LatticePath(ClonableIntArray):
 
     def area_word(self):
         # Returns the area word of the path.
-        return [self.main_diagonal(i)-self.column(i) for i in range(self.height)]
+
+        # # This is inefficient
+        # return [self.main_diagonal(i)-self.column(i) for i in range(self.height)]
+
+        area_word = []  # Initializes the area word to an empty string.
+        level = 0  # Sets starting level to 0.
+        height = 0  # Sets starting height to 0.
+
+        for i in self.path:
+            if i == 1:  # If the Dyck path has a vertical step, it adds a letter to the area word, and then goes up a level.
+                area_word += [level]
+                level += 1 if (height in self.rises or height in self.valleys) else self.slope
+                height += 1
+            elif i == 0:  # If the Dyck path has a horizontal step, it goes down a level.
+                level -= 1
+            else:
+                raise ValueError('Entries of the path must be 0 or 1.')
+
+        return area_word
 
     def area(self):
         # Returns the area. Ignores rows with decorated rises.
