@@ -3,14 +3,16 @@ SageMath module.
 Tools for the shuffle theorem and variants.
 '''
 
+# TODO: Write documentation!
+
 from itertools import combinations
 from more_itertools import distinct_combinations
 from multiset import Multiset
+from sage.all import ClonableIntArray
 from sage.categories.finite_enumerated_sets import FiniteEnumeratedSets
 from sage.categories.infinite_enumerated_sets import InfiniteEnumeratedSets
 from sage.rings.all import Rational, ZZ
 from sage.structure.all import Parent
-from sage.structure.list_clone import ClonableIntArray  # type: ignore
 from sage.structure.global_options import GlobalOptions
 from sage.structure.unique_representation import UniqueRepresentation
 
@@ -147,9 +149,6 @@ def _mu_labellings(blocks, labels, strict=True, increasing=True):
 
 
 class LatticePath(ClonableIntArray):
-    r'''
-    # TODO: Write some actual documentation.
-    '''
 
     def __init__(self, parent, path, labels=None, rises=[], valleys=[], latex_options={}):
 
