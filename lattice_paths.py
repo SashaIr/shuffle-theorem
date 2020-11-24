@@ -522,6 +522,47 @@ class DyckPath(SquarePath, RectangularDyckPath):
     def check(self):
         pass
 
+    def parking_word(self):
+        # Returns the parking word of the path, i.e. the word whose descent set of the inverse gives the pmaj.
+        if self.labels is None:
+            labels = [x+1 for x in range(self.length)]
+        else:
+            labels = self.labels
+
+        stack = Multiset()  # stack is the (multi)set of unused labels.
+        parking_word = []  # Initializes the parking word to an empty string.
+
+        adjusted_columns = self.columns()
+        for v in self.valleys[::-1]:
+            column = adjusted_columns[v]
+            for i in range(self.height):
+                if column <= adjusted_columns[i] <= column + self.aword[v]:
+                    adjusted_columns[i] -= 1
+
+        for i in range(self.width):
+            # We add the labels in the i-th column to the stack.
+            stack += Multiset([self.labels[j] for j in range(self.height) if adjusted_columns[j] == i])
+
+            while((len(parking_word)+1)*self.width <= (i+1)*self.height):
+                # We add to the parking word as many labels as the slope permits.
+
+                if parking_word == [] or (stack & set(range(parking_word[-1]+1)) == set()):
+                    # If there is no unused label that is smaller than the last one,
+                    # we take the biggest label available.
+                    u = max(stack)
+                else:
+                    # Otherwise, we take the highest unused label smaller than the last one.
+                    u = max(stack & set(range(parking_word[-1]+1)))
+
+                # We add the label to the parking word, and remove it from the unused labels.
+                parking_word += [u]
+                stack -= {u}
+
+        return parking_word
+
+    def pmaj(self):
+        return sum(i for i in range(1, self.heigth) if self.parking_word()[-i] > self.parking_word()[-i-1])
+
 
 class LatticePaths(UniqueRepresentation, Parent):
 
