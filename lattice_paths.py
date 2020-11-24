@@ -17,6 +17,7 @@ from sage.combinat.partition import Partition
 from sage.combinat.permutation import Permutation
 from sage.functions.other import floor
 from sage.misc.all import cached_method
+from sage.misc.latex import latex
 from sage.rings.all import Rational, ZZ
 from sage.structure.all import Parent
 from sage.structure.list_clone import ClonableIntArray  # type: ignore
@@ -376,6 +377,77 @@ class LatticePath(ClonableIntArray):
         ls = Permutation([i for i in self.reading_word(read)[::-1] if i > 0], check_input=True)
         return Composition(from_subset=(ls.idescents(), len(ls)))
 
+    def set_latex_options(self, options):
+        for option in options:
+            self._latex_options[option] = options[option]
+
+    def latex_options(self):
+
+        path_latex_options = self._latex_options.copy()
+        if 'bounce path' not in path_latex_options:
+            path_latex_options['bounce path'] = self.parent().options.latex_bounce_path
+        if 'colour' not in path_latex_options:
+            path_latex_options['colour'] = self.parent().options.latex_colour
+        if 'diagonal' not in path_latex_options:
+            path_latex_options['diagonal'] = self.parent().options.latex_diagonal
+        if 'tikz_scale' not in path_latex_options:
+            path_latex_options['tikz_scale'] = self.parent().options.latex_tikz_scale
+        if 'line width' not in path_latex_options:
+            path_latex_options['line width'] = self.parent().options.latex_line_width * \
+                path_latex_options['tikz_scale']
+
+        return path_latex_options
+
+    def _latex_(self):
+
+        latex.add_package_to_preamble_if_available('tikz')
+        latex_options = self.latex_options()
+        colour = latex_options['colour']
+        line_width = latex_options['line width']
+        scale = latex_options['tikz_scale']
+
+        tikz = '\n'
+        tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
+        tikz += f'    \\draw[draw=none, use as bounding box] (-1,-1) rectangle ({self.width+1},{self.height+1});\n'
+        tikz += f'    \\draw[step=1.0, gray!60, thin] (0,0) grid ({self.width},{self.height});\n\n'
+
+        if latex_options['diagonal'] == True:
+            tikz += '    \\begin{scope}\n'
+            tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
+
+            tikz += f'        \\draw[gray!60, thin] (0,0)'
+
+            for i in range(self.height+1):
+                x = Rational(self.main_diagonal()[i] + self.shift)
+                tikz += f' -- ({x.numerator()}/{x.denominator()}, {i})'
+
+            tikz += ';\n'
+            tikz += '    \\end{scope}\n\n'
+
+        tikz += f'    \\draw[{colour}, line width={line_width}pt] (0,0)'
+        labels = ''
+        rises = ''
+        valleys = ''
+
+        x = y = 0
+        for i in self.path:
+            if i == 1 and self.labels is not None:
+                labels += f'    \\draw ({x+0.5:+.1f},{y+0.5:+.1f}) circle (0.4cm) node {{${self.labels[y]}$}};'
+            x += 1 - i
+            y += i
+            tikz += f' -- ({x},{y})'
+        tikz += ';\n\n'
+
+        for i in self.rises:
+            rises += '    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+                [sum(self.path[:j]) for j in range(self.length)].index(i)-i-0.5, i+0.5)
+
+        for i in self.valleys:
+            valleys += '    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
+                [sum(self.path[:j]) for j in range(self.length)].index(i+1)-(i+1)-0.5, (i+1)-0.5)
+
+        return (tikz + labels + rises + valleys + '\\end{tikzpicture}')
+
 
 class RectangularPath(LatticePath):
     def check(self):
@@ -455,7 +527,8 @@ class LatticePaths(UniqueRepresentation, Parent):
 
     @ staticmethod
     def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
-                              dyck=False, square=False, decorated_rises=0, decorated_valleys=0):
+                              dyck=False, square=False, decorated_rises=0, decorated_valleys=0,
+                              latex_options={}):
         '''
         Choose the correct parent
         '''
@@ -511,89 +584,49 @@ class LatticePaths(UniqueRepresentation, Parent):
 
     # add options to class
     class options(GlobalOptions):
-        r"""
-        Set and display the options for Dyck words. If no parameters
+        r'''
+        Set and display the options for Lattice Paths. If no parameters
         are set, then the function returns a copy of the options dictionary.
 
-        The ``options`` to Dyck words can be accessed as the method
-        :meth:`DyckWords.options` of :class:`DyckWords` and
+        The ``options`` to Lattice Paths can be accessed as the method
+        :meth:`LatticePaths.options` of :class:`LatticePaths` and
         related parent classes.
+        '''
 
-        @OPTIONS
-
-        EXAMPLES::
-
-            sage: D = DyckWord([1, 1, 0, 1, 0, 0])
-            sage: D
-            [1, 1, 0, 1, 0, 0]
-            sage: DyckWords.options.display="lattice"
-            sage: D
-               ___
-             _| x
-            | x  .
-            |  . .
-            sage: DyckWords.options(diagram_style="line")
-            sage: D
-             /\/\
-            /    \
-            sage: DyckWords.options._reset()
-        """
-        NAME = 'DyckWords'
-        module = 'sage.combinat.dyck_word'
-        display = dict(default="list",
-                       description='Specifies how Dyck words should be printed',
-                       values=dict(list='displayed as a list',
-                                   lattice='displayed on the lattice defined by ``diagram_style``'),
-                       case_sensitive=False)
-        ascii_art = dict(default="path",
-                         description='Specifies how the ascii art of Dyck words should be printed',
-                         values=dict(path="Using the path string",
-                                     pretty_output="Using pretty printing"),
-                         alias=dict(pretty_print="pretty_output", path_string="path"),
-                         case_sensitive=False)
-        diagram_style = dict(default="grid",
-                             values=dict(grid='printing as paths on a grid using N and E steps',
-                                         line='printing as paths on a line using NE and SE steps',),
-                             alias={'N-E': 'grid', 'NE-SE': 'line'},
-                             case_sensitive=False)
+        NAME = 'LatticePaths'
+        module = 'shuffle_theorem'
         latex_tikz_scale = dict(default=1,
-                                description='The default value for the tikz scale when latexed',
+                                description='The default value for the tikz scale when latexed.',
                                 checker=lambda x: True)  # More trouble than it's worth to check
-        latex_diagonal = dict(default=False,
-                              description='The default value for displaying the diagonal when latexed',
+        latex_diagonal = dict(default=True,
+                              description='The default value for displaying the diagonal when latexed.',
                               checker=lambda x: isinstance(x, bool))
-        latex_line_width_scalar = dict(default=2,
-                                       description='The default value for the line width as a '
-                                       'multiple of the tikz scale when latexed',
-                                       checker=lambda x: True)  # More trouble than it's worth to check
-        latex_color = dict(default="black",
-                           description='The default value for the color when latexed',
-                           checker=lambda x: isinstance(x, str))
+        latex_line_width = dict(default=2,
+                                description='The default value for the line width as a '
+                                'multiple of the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_colour = dict(default='blue!60',
+                            description='The default value for the colour when latexed.',
+                            checker=lambda x: isinstance(x, str))
         latex_bounce_path = dict(default=False,
-                                 description='The default value for displaying the bounce path when latexed',
+                                 description='The default value for displaying the bounce path when latexed.',
                                  checker=lambda x: isinstance(x, bool))
-        latex_peaks = dict(default=False,
-                           description='The default value for displaying the peaks when latexed',
-                           checker=lambda x: isinstance(x, bool))
-        latex_valleys = dict(default=False,
-                             description='The default value for displaying the valleys when latexed',
-                             checker=lambda x: isinstance(x, bool))
 
     def _element_constructor_(self, word):
-        """
+        '''
         Construct an element of ``self``.
 
         EXAMPLES::
 
-            sage: D = DyckWords()
-            sage: elt = D([1, 1, 0, 1, 0, 0]); elt
+            sage: LP = LatticePaths()
+            sage: path = LP([1, 1, 0, 1, 0, 0]); path
             [1, 1, 0, 1, 0, 0]
-            sage: elt.parent() is D
+            sage: path.parent() is LP
             True
-        """
-        if isinstance(word, DyckPath) and word.parent() is self:
+        '''
+        if isinstance(word, LatticePath) and word.parent() is self:
             return word
-        return self.element_class(self, list(word))
+        return self.element_class(self, path=list(word))
 
 
 class RectangularPaths(LatticePaths):
