@@ -8,13 +8,22 @@ Tools for the shuffle theorem and variants.
 from itertools import combinations
 from more_itertools import distinct_combinations
 from multiset import Multiset
-from sage.all import ClonableIntArray
+
+from sage.arith.misc import gcd
 from sage.categories.finite_enumerated_sets import FiniteEnumeratedSets
 from sage.categories.infinite_enumerated_sets import InfiniteEnumeratedSets
+from sage.combinat.composition import Composition
+from sage.combinat.partition import Partition
+from sage.combinat.permutation import Permutation
+from sage.functions.other import floor
+from sage.misc.all import cached_method
 from sage.rings.all import Rational, ZZ
 from sage.structure.all import Parent
+from sage.structure.list_clone import ClonableIntArray  # type: ignore
 from sage.structure.global_options import GlobalOptions
 from sage.structure.unique_representation import UniqueRepresentation
+
+from shuffle_theorem.symmetric_functions import characteristic_function
 
 
 def _generate_lattice_paths(m, n, dyck=True, rises=[], valleys=[], _shift=0, _slope=None, _going_up=False):
@@ -130,19 +139,19 @@ def _lattice_paths(width, height=None, dyck=True, labelled=True, labels=None, dr
                         yield item_class(parent, path, labels=l, rises=r, valleys=v)
 
 
-def _mu_labellings(blocks, labels, strict=True, increasing=True):
+def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
 
     if len(blocks) == 0:
         yield []
     else:
         if strict == True:
-            label_choices = combinations(set(labels), blocks[0])
+            label_choices = combinations(set(label_composition), blocks[0])
         else:
-            label_choices = distinct_combinations(labels, blocks[0])
+            label_choices = distinct_combinations(label_composition, blocks[0])
         for chosen_labels in label_choices:
             chosen_labels = sorted(list(chosen_labels), reverse=not increasing)
             for other_labels in _mu_labellings(blocks[1:],
-                                               list((Multiset(labels) - Multiset(chosen_labels))),
+                                               list((Multiset(label_composition) - Multiset(chosen_labels))),
                                                strict=strict,
                                                increasing=increasing):
                 yield chosen_labels + other_labels
@@ -152,19 +161,16 @@ class LatticePath(ClonableIntArray):
 
     def __init__(self, parent, path, labels=None, rises=[], valleys=[], latex_options={}):
 
-        # TODO: Change this to allow for different inputs.
-        if not (isinstance(path, list) and all(x in [0, 1] for x in path)):
-            raise ValueError(f'Invalid path (= {path}), entries must be 0 and 1.')
-
         super().__init__(parent, path)
 
         # It's the actual path, stored as a string of 0's (east steps) and 1's (north steps)
         self.path = path
+
         # It's the list of the labels of the path, to read bottom to top. Default is None.
         self.labels = labels
-        # These are the indices of the decorated rises.
+
+        # These are the indices of the decorated rises and decorated valleys.
         self.rises = rises
-        # These are the indices of the decorated valleys.
         self.valleys = valleys
 
         # Total length, width, and height of the path.
@@ -176,15 +182,19 @@ class LatticePath(ClonableIntArray):
         self.slope = 1 if self.width == self.height \
             else Rational((self.width - len(self.rises) - len(self.valleys)) /
                           (self.height - len(self.rises) - len(self.valleys)))
+
         # It's the disance between the main diagonal and the base diagonal.
         self.shift = - min(self.area_word()) if self.height > 0 else 0
-        # It's the area word of the path, as list.
-        self.aword = self.area_word()
         # Instruction on how to draw the path in LaTeX.
         self._latex_options = dict(latex_options)
 
     def check(self):
         pass
+        # if not (isinstance(self.path, list) and all(x in [0, 1] for x in self.path)):
+        #     raise ValueError(f'Invalid path (= {self.path}), entries must be 0 and 1.')
+
+        # if not self.valleys == []:
+        #     raise ValueError('Decorated valleys are only supported for square paths.')
 
     def __len__(self):
         return len(self.path)
@@ -203,6 +213,14 @@ class LatticePath(ClonableIntArray):
         representation += ')'
         return representation
 
+    def qstat(self):
+        # Sets a default q-statistic.
+        return self.dinv()
+
+    def tstat(self):
+        # Sets a default t-statistic.
+        return self.area()
+
     def labellings(self, composition=None):
         # Returns all the possible labellings of the path, provided that it has no labels and no decorations.
         # It is possible to specify which labels to use, composition[i] being the number of i's appearing.
@@ -217,11 +235,11 @@ class LatticePath(ClonableIntArray):
         # Find the composition given by the vertical steps of the path.
         peaks = [-1] + [i for i in range(self.height) if(
             i == self.height-1
-            or (self.aword[i+1] < self.aword[i] and i in self.rises)
-            or (self.aword[i+1] < self.aword[i] + self.slope - 1 and i not in self.rises)
-            or (self.aword[i+1] == self.aword[i]
+            or (self.area_word()[i+1] < self.area_word()[i] and i in self.rises)
+            or (self.area_word()[i+1] < self.area_word()[i] + self.slope - 1 and i not in self.rises)
+            or (self.area_word()[i+1] == self.area_word()[i]
                 and i in self.rises and i+1 not in self.valleys)
-            or (self.aword[i+1] == self.aword[i] + self.slope - 1
+            or (self.area_word()[i+1] == self.area_word()[i] + self.slope - 1
                 and i not in self.rises and i+1 not in self.valleys)
         )]
 
@@ -230,76 +248,133 @@ class LatticePath(ClonableIntArray):
         # Define the set of labels.
         labels = [x for y in [[i]*composition[i] for i in range(len(composition))] for x in y]
         labellings = [labelling for labelling in _mu_labellings(blocks, labels) if not (
-            (self.length > 0 and self.aword[0] == 0 and labelling[0] == 0)
-            or (len([i for i in range(self.height) if self.aword[i] == -self.shift and labelling[i] > 0 and i not in self.valleys]) == 0)
+            (self.length > 0 and self.area_word()[0] == 0 and labelling[0] == 0)
+            or (len([i for i in range(self.height) if self.area_word()[i] == -self.shift and labelling[i] > 0 and i not in self.valleys]) == 0)
         )]
 
         return labellings
 
-    def column(self, i):
-        # Returns the index of the column (numbered starting from 0) containing the label with index i.
-        return [sum(self.path[:j]) for j in range(self.length)].index(i+1)-i-1
-
-    def main_diagonal(self, i):
-        # Returns x-coordinates of the y-integer points of the main diagonal.
-
-        # return i
-        decorations_below = len([j for j in range(i) if j in self.rises or j in self.valleys])
-
-        return self.slope*(i-decorations_below) + decorations_below
-
+    @cached_method
     def area_word(self):
         # Returns the area word of the path.
 
-        # # This is inefficient
-        # return [self.main_diagonal(i)-self.column(i) for i in range(self.height)]
+        return [self.main_diagonal()[i]-self.columns()[i] for i in range(self.height)]
 
-        area_word = []  # Initializes the area word to an empty string.
-        level = 0  # Sets starting level to 0.
-        height = 0  # Sets starting height to 0.
+        # # This was more efficient without caching, but now it isn't.
+        # area_word = []  # Initializes the area word to an empty string.
+        # level = 0  # Sets starting level to 0.
+        # height = 0  # Sets starting height to 0.
+
+        # for i in self.path:
+        #     if i == 1:  # If the Dyck path has a vertical step, it adds a letter to the area word, and then goes up a level.
+        #         area_word += [level]
+        #         level += 1 if (height in self.rises or height in self.valleys) else self.slope
+        #         height += 1
+        #     else:  # If the Dyck path has a horizontal step, it goes down a level.
+        #         level -= 1
+
+        # return area_word
+
+    @cached_method
+    def main_diagonal(self):
+        # Returns x-coordinates of the y-integer points of the main diagonal (not the base diagonal).
+
+        main_diagonal = [0]
+        position = 0
+
+        for i in range(self.height):
+            position += 1 if (i in self.rises or i in self.valleys) else self.slope
+            main_diagonal += [position]
+
+        return main_diagonal
+
+    @cached_method
+    def columns(self):
+        # Returns the index of the column (numbered starting from 0) containing the label with index i.
+        # Returns x-coordinates of the y-integer points of the main diagonal (not the base diagonal).
+
+        columns = []
+        position = 0
 
         for i in self.path:
-            if i == 1:  # If the Dyck path has a vertical step, it adds a letter to the area word, and then goes up a level.
-                area_word += [level]
-                level += 1 if (height in self.rises or height in self.valleys) else self.slope
-                height += 1
-            elif i == 0:  # If the Dyck path has a horizontal step, it goes down a level.
-                level -= 1
+            if i == 1:
+                columns += [position]
             else:
-                raise ValueError('Entries of the path must be 0 or 1.')
+                position += 1
 
-        return area_word
+        return columns
+
+    def ferrer(self):
+        # Returns the (English) Ferrer diagram above the path, as partition.
+        return Partition(self.columns()[::-1])
 
     def area(self):
         # Returns the area. Ignores rows with decorated rises.
-        area = sum(self.aword[i] + self.shift for i in range(self.height) if i not in self.rises)
+        area = sum(floor(self.area_word()[i] + self.shift) for i in range(self.height) if i not in self.rises)
         return area
 
     def dinv(self):
-        dinv = 0  # Initializes dinv to 0.
+        # Returns the dinv. If the path is labelled, it takes the labelling into account.
+        # Currently works for any rectangular path with no decorated rises, and any square path.
+        # TODO: It does not work for any rectangular path with decorated rises.
+        # TODO: It does not allow for decorated contractible valleys.
 
-        # Goes through the letters of the area word.
+        temp_dinv = 0
         for i in range(self.height):
-            if self.aword[i] < 0:  # Bonus dinv
-                dinv += 1
-            if i not in self.valleys:  # Skip decorated valleys
-                for j in range(i+1, self.height):  # Looks at the right.
-                    if self.aword[j] == self.aword[i]-1:  # Secondary dinv
-                        # Checks labels
-                        if self.labels is None or self.labels[j] < self.labels[i]:
-                            dinv += 1
-                for j in range(i+1, self.height):
-                    if self.aword[j] == self.aword[i]:  # Primary dinv
-                        # Checks labels
-                        if self.labels is None or self.labels[j] > self.labels[i]:
-                            dinv += 1
-            else:  # Subtract 1 for each decorated valley
-                dinv += -1
+            temp_dinv += len([j for j in range(self.height) if (
+                (self.labels is None or self.labels[i] < self.labels[j]) and (
+                    (self.area_word()[i] == self.area_word()[j] and i < j)
+                    or (i+1 not in self.rises
+                        and self.area_word()[i] < self.area_word()[j] < self.area_word()[i] + self.slope)
+                    or (i+1 in self.rises
+                        and self.area_word()[i] < self.area_word()[j] < self.area_word()[i] + 1)
+                ))])
 
-        return dinv
+        ferrer_dinv = 0
+        ferrer = self.ferrer()
+
+        for c in ferrer.cells():
+            if (self.height*(ferrer.arm_length(*c)+1) <= self.width*(ferrer.leg_length(*c)+1)
+                    and self.width*ferrer.leg_length(*c) < self.height*ferrer.arm_length(*c)):
+                ferrer_dinv += 1
+
+            if (self.height*ferrer.arm_length(*c) <= self.width*ferrer.leg_length(*c)
+                    and self.width*(ferrer.leg_length(*c)+1) < self.height*(ferrer.arm_length(*c)+1)):
+                ferrer_dinv -= 1
+
+        bonus_dinv = len([i for i in range(self.height) if self.area_word()[i] < 0
+                          and (self.labels is None or self.labels[i] > 0)])
+
+        return temp_dinv + ferrer_dinv + bonus_dinv
 
     def zero(self):
         return 0
+
+    def diagonal_word(self):
+        # Returns the word obtained by sorting the diagonals in decreasing order, bottom to top.
+        return [self.labels[i] for i in sorted(list(range(self.height)),
+                                               key=lambda i: (self.area_word()[i], self.labels[i]))]
+
+    def reading_word(self, read=None):
+        # Computes the reading word of a path
+
+        if read is None:
+            read = 'diagonal'
+
+        if read == 'diagonal':
+            # Reading word according to the dinv statistic,
+            # i.e. along diagonals, left to right, bottom to top.
+            return [self.labels[i] for i in sorted(list(range(self.height)),
+                                                   key=lambda i: (self.area_word()[i], i))]
+        elif read == 'vertical':
+            # Reading word according to the pmaj statistic, i.e. along columns, bottom to top.
+            return self.labels
+        else:
+            raise ValueError('Reading order not recognised.')
+
+    def gessel(self, read=None):
+        ls = Permutation([i for i in self.reading_word(read)[::-1] if i > 0], check_input=True)
+        return Composition(from_subset=(ls.idescents(), len(ls)))
 
 
 class RectangularPath(LatticePath):
@@ -308,13 +383,67 @@ class RectangularPath(LatticePath):
 
 
 class RectangularDyckPath(RectangularPath):
+
     def check(self):
         pass
+        # if not (self.shift == 0):
+        #     raise ValueError(f'The path\'s shift is not 0.')
+
+    def characteristic_function(self):
+        # Returns the characteristic function of the path, computed in terms of d+ d- operators.
+
+        if self.labels is not None or self.rises != [] or self.valleys != []:
+            raise NotImplementedError('The characteristic function can only be computed for plain paths.')
+
+        return characteristic_function(self)
+
+    def zeta(self):
+        # https://www.combinatorics.org/ojs/index.php/eljc/article/view/v24i1p64
+
+        # Sweeps the steps of the path according to the distance from the main diagonal of their ending point.
+        # In case of a tie, the leftmost step is sweeped first. The path is then reversed.
+
+        if self.labels is not None or self.rises != [] or self.valleys != []:
+            raise NotImplementedError('The zeta map can only be computed for plain paths.')
+
+        def rank(x, y):
+            # Gives the rank of the cell with cartesian coordinates (x,y).
+            # https://arxiv.org/abs/1501.00631 p.19
+
+            return y*self.width - x*self.height + (x*gcd(self.width, self.height) // self.width)
+
+        path = [self[i] for i in sorted(range(len(self)),
+                                        key=lambda j: (rank(j+1-sum(self[:j+1]), sum(self[:j+1]))))]
+
+        return self.__class__(path[::-1])
 
 
 class SquarePath(RectangularPath):
     def check(self):
         pass
+
+    def dinv(self):
+        dinv = 0  # Initializes dinv to 0.
+
+        # Goes through the letters of the area word.
+        for i in range(self.height):
+            if self.area_word()[i] < 0:  # Bonus dinv
+                dinv += 1
+            if i not in self.valleys:  # Skip decorated valleys
+                for j in range(i+1, self.height):  # Looks at the right.
+                    if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
+                        # Checks labels
+                        if self.labels is None or self.labels[j] < self.labels[i]:
+                            dinv += 1
+                for j in range(i+1, self.height):
+                    if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
+                        # Checks labels
+                        if self.labels is None or self.labels[j] > self.labels[i]:
+                            dinv += 1
+            else:  # Subtract 1 for each decorated valley
+                dinv += -1
+
+        return dinv
 
 
 class DyckPath(SquarePath, RectangularDyckPath):
@@ -324,8 +453,8 @@ class DyckPath(SquarePath, RectangularDyckPath):
 
 class LatticePaths(UniqueRepresentation, Parent):
 
-    @staticmethod
-    def __classcall_private__(cls, height=None, width=None, labelled=True, labels=None,
+    @ staticmethod
+    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
                               dyck=False, square=False, decorated_rises=0, decorated_valleys=0):
         '''
         Choose the correct parent
@@ -468,29 +597,29 @@ class LatticePaths(UniqueRepresentation, Parent):
 
 
 class RectangularPaths(LatticePaths):
-    @staticmethod
-    def __classcall_private__(cls, height=None, width=None, labelled=True, labels=None,
+    @ staticmethod
+    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
                               dyck=False, decorated_rises=0, decorated_valleys=0):
 
-        return LatticePaths(height=height, width=width, labelled=labelled, labels=labels,
+        return LatticePaths(width=width, height=height, labelled=labelled, labels=labels,
                             dyck=dyck, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
 
     Element = RectangularPath
 
 
 class RectangularDyckPaths(RectangularPaths):
-    @staticmethod
-    def __classcall_private__(cls, height=None, width=None, labelled=True, labels=None,
+    @ staticmethod
+    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
                               decorated_rises=0, decorated_valleys=0):
 
-        return LatticePaths(height=height, width=width, labelled=labelled, labels=labels,
+        return LatticePaths(width=width, height=height, labelled=labelled, labels=labels,
                             dyck=True, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
 
     Element = RectangularDyckPath
 
 
 class SquarePaths(RectangularPaths):
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, size=None, labelled=True, labels=None,
                               dyck=False, decorated_rises=0, decorated_valleys=0):
 
@@ -501,7 +630,7 @@ class SquarePaths(RectangularPaths):
 
 
 class DyckPaths(SquarePaths, RectangularDyckPaths):
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, size=None, labelled=True, labels=None,
                               decorated_rises=0, decorated_valleys=0):
 

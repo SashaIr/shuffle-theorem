@@ -6,14 +6,13 @@ Tools for the shuffle theorem and variants.
 # TODO: Write documentation!
 
 # Import packages.
-from sage.all import cached_function
 from sage.arith.misc import gcd, xgcd
 from sage.combinat.partition import Partitions
 from sage.combinat.composition import Compositions
 from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
 from sage.combinat.sf.macdonald import cmunu
-from sage.misc.all import prod
+from sage.misc.all import cached_function, prod
 from sage.rings.all import PolynomialRing, QQ
 
 
@@ -41,7 +40,7 @@ QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
 QSymqt.inject_shorthands(verbose=False)
 
 
-def qt(items, qstat='qstat', tstat='tstat', x=False, read='standard'):
+def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
     # Computes the q,t-polynomial associated to any set, a q-statistic, and a t-statistic.
 
     if x == False:
