@@ -44,7 +44,7 @@ from .symmetric_functions import characteristic_function
 def _format_constraints(constraints, reverse=False):
 
     defaults = {'width': None, 'height': None, 'shift': None, 'square': False,
-                'labelled': False, 'labels': None, 'decorated_rises': 0, 'decorated_valleys': 0, }
+                'labelled': True, 'labels': None, 'decorated_rises': 0, 'decorated_valleys': 0, }
 
     if reverse is False:
         args, kwargs = constraints
@@ -166,7 +166,7 @@ def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, d
 
     # Sets the deafult set of labels to [n].
     if labels is None:
-        labels = [0] + [1]*(height)
+        labels = tuple([0] + [1]*(height))
 
     for r in combinations(range(1, height), decorated_rises):
         for v in combinations([i for i in range(height) if i not in r], decorated_valleys):
@@ -639,7 +639,7 @@ class LatticePathsFactory(SetFactory):
 
         options = {
             'labelled': labelled,
-            'labels': labels,
+            'labels': None if labels is None else tuple(labels),
             'decorated_rises': decorated_rises,
             'decorated_valleys': decorated_valleys,
         }
