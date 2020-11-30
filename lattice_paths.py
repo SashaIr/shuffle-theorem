@@ -855,7 +855,6 @@ class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
             ),
             facade=True, keepkey=False, category=self.category()
         )
-        print(self.facade_policy())
 
     def __repr__(self):
         return f'Rectangular Paths of size {self._width, self._height}'
