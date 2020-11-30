@@ -158,7 +158,7 @@ def _generate_lattice_paths(m, n, shift=None, rises=[], valleys=[], _level=0, _s
                     yield [1] + p
 
 
-def _lattice_paths(width, height=None, shift=None, labelled=False, labels=None, decorated_rises=0, decorated_valleys=0):
+def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, decorated_rises=0, decorated_valleys=0):
 
     if height is None:
         # If no value is specified, the grid is assumed to be a square.
@@ -174,7 +174,7 @@ def _lattice_paths(width, height=None, shift=None, labelled=False, labels=None, 
                 if labelled is False:
                     yield path, None, r, v
                 else:
-                    for l in LatticePath(LatticePaths(), path, rises=r, valleys=v).labellings(labels):
+                    for l in LatticePath(path, rises=r, valleys=v).labellings(labels):
                         yield path, l, r, v
 
 
@@ -632,13 +632,14 @@ class DyckPath(SquarePath, RectangularDyckPath):
 class LatticePathsFactory(SetFactory):
     Element = LatticePath
 
-    def __call__(self, width=None, height=None, shift=None, square=False, labelled=False, labels=None, decorated_rises=0, decorated_valleys=0, policy=None):
+    def __call__(self, width=None, height=None, shift=None, square=False, labelled=True, labels=None, decorated_rises=0, decorated_valleys=0, policy=None):
 
         if policy is None:
             policy = self._default_policy
 
         options = {
             'labelled': labelled,
+            'labels': labels,
             'decorated_rises': decorated_rises,
             'decorated_valleys': decorated_valleys,
         }
