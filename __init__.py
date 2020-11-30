@@ -1,3 +1,4 @@
-import latex
-import lattice_paths
-import symmetric_functions
+from shuffle_theorem.latex import *
+from shuffle_theorem.lattice_paths import *
+from shuffle_theorem.shuffle import *
+from shuffle_theorem.symmetric_functions import *

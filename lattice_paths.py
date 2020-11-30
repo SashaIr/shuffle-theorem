@@ -5,53 +5,102 @@ Tools for the shuffle theorem and variants.
 
 # TODO: Write documentation!
 
-from itertools import combinations
+from itertools import combinations, product
 from more_itertools import distinct_combinations
 from multiset import Multiset
+from six import add_metaclass
 
 from sage.arith.misc import gcd
+from sage.categories.cartesian_product import cartesian_product
 from sage.categories.finite_enumerated_sets import FiniteEnumeratedSets
 from sage.categories.infinite_enumerated_sets import InfiniteEnumeratedSets
 from sage.combinat.composition import Composition
 from sage.combinat.partition import Partition
 from sage.combinat.permutation import Permutation
 from sage.functions.other import floor
-from sage.misc.all import cached_method
+from sage.misc.all import cached_method, lazy_attribute, lazy_class_attribute
 from sage.misc.latex import latex
-from sage.rings.all import Rational, ZZ
+from sage.misc.mrange import cantor_product, cartesian_product_iterator
+from sage.rings.all import ZZ, Integer, Rational
+from sage.sets.disjoint_union_enumerated_sets import \
+    DisjointUnionEnumeratedSets
+from sage.sets.family import Family
+from sage.sets.positive_integers import PositiveIntegers
+from sage.sets.set_from_iterator import EnumeratedSetFromIterator
 from sage.structure.all import Parent
-from sage.structure.list_clone import ClonableIntArray  # type: ignore
+from sage.structure.dynamic_class import \
+    DynamicInheritComparisonClasscallMetaclass
 from sage.structure.global_options import GlobalOptions
+from sage.structure.list_clone import ClonableIntArray  # type: ignore
+from sage.structure.set_factories import (BareFunctionPolicy, ParentWithSetFactory,
+                                          FacadeParentPolicy,
+                                          SelfParentPolicy, SetFactory,
+                                          TopMostParentPolicy)
 from sage.structure.unique_representation import UniqueRepresentation
 
-from shuffle_theorem.symmetric_functions import characteristic_function
+from .symmetric_functions import characteristic_function
 
 
-def _generate_lattice_paths(m, n, dyck=True, rises=[], valleys=[], _shift=0, _slope=None, _going_up=False):
+def _format_constraints(constraints, reverse=False):
+
+    defaults = {'width': None, 'height': None, 'shift': None, 'square': False,
+                'labelled': False, 'labels': None, 'decorated_rises': 0, 'decorated_valleys': 0, }
+
+    if reverse is False:
+        args, kwargs = constraints
+        formatted_constraints = [defaults[key] for key in defaults.keys()]
+
+        for i, arg in enumerate(args):
+            formatted_constraints[i] = arg
+
+        for i, key in enumerate(defaults):
+            if key in kwargs:
+                formatted_constraints[i] = kwargs[key]
+
+        return tuple(formatted_constraints)
+
+    elif reverse is True:
+        formatted_constraints = defaults
+        constraints = list(constraints)
+
+        for c in enumerate(constraints):
+            formatted_constraints[list(defaults)[c[0]]] = c[1]
+
+        return formatted_constraints
+
+
+def _generate_lattice_paths(m, n, shift=None, rises=[], valleys=[], _level=0, _slope=None, _going_up=False, _flag=False):
     '''
     Builds all the lattice paths from (0,0) to (m,n), as generator,
     where a path is a 0-1 sequence where 0 denotes an east step, 1 denotes a north step.
 
-    If dyck is set to True, it will only build the paths that lie wealky above the main diagonal,
+    If a shift is specified, it will only build the paths with exactly that shift,
     otherwise it will build all the paths ending east.
 
     The paths will have rises and valleys in the specified rows.
 
-    The variables _shift, _slope, and _going_up are internal.
+    The variables _level, _slope, _going_up, and _flag are internal.
     '''
 
     if n == 0:
-        yield [0]*m
+        if shift is None or _flag is True:
+            yield [0]*m
     elif m == 0:
         pass
     else:
+        if shift is not None:
+            if _level < - shift:
+                return None
+            elif _level == -shift:
+                _flag = True
+
         if _slope is None:
 
             m1 = m-len(rises)-len(valleys)
             n1 = n-len(rises)-len(valleys)
 
             if m1 <= 0 or n1 <= 0:
-                raise ValueError('Too many rises and valleys.')
+                return None
 
             _slope = Rational(m1/n1)
 
@@ -60,84 +109,73 @@ def _generate_lattice_paths(m, n, dyck=True, rises=[], valleys=[], _shift=0, _sl
                 for p in _generate_lattice_paths(
                         m,
                         n-1,
-                        dyck=dyck,
+                        shift=shift,
                         rises=[i-1 for i in rises[1:]],
                         valleys=[i-1 for i in valleys],
-                        _shift=_shift+1,
+                        _level=_level+1,
                         _slope=_slope,
-                        _going_up=True):
+                        _going_up=True,
+                        _flag=_flag):
                     yield [1] + p
+
+        else:
+            for p in _generate_lattice_paths(
+                    m-1,
+                    n,
+                    shift=shift,
+                    rises=rises,
+                    valleys=valleys,
+                    _level=_level-1,
+                    _slope=_slope,
+                    _going_up=False,
+                    _flag=_flag):
+                yield [0] + p
+
+            if 0 in valleys:
+                if _going_up == False:
+                    for p in _generate_lattice_paths(
+                            m,
+                            n-1,
+                            shift=shift,
+                            rises=[i-1 for i in rises],
+                            valleys=[i-1 for i in valleys[1:]],
+                            _level=_level+1,
+                            _slope=_slope,
+                            _going_up=True,
+                            _flag=_flag):
+                        yield [1] + p
             else:
-                pass
-
-        elif 0 not in rises:
-            if _shift >= 1 or dyck == False:
-                for p in _generate_lattice_paths(
-                        m-1, n,
-                        dyck=dyck,
-                        rises=rises,
-                        valleys=valleys,
-                        _shift=_shift-1,
-                        _slope=_slope,
-                        _going_up=False):
-                    yield [0] + p
-
-            if 0 in valleys and _going_up == False:
                 for p in _generate_lattice_paths(
                         m,
                         n-1,
-                        dyck=dyck,
+                    shift=shift,
                         rises=[i-1 for i in rises],
-                        valleys=[i-1 for i in valleys[1:]],
-                        _shift=_shift+1,
+                        valleys=[i-1 for i in valleys],
+                        _level=_level+_slope,
                         _slope=_slope,
-                        _going_up=True):
+                        _going_up=True,
+                        _flag=_flag):
                     yield [1] + p
 
-        if 0 not in rises and 0 not in valleys:
 
-            for p in _generate_lattice_paths(
-                    m, n-1,
-                    dyck=dyck,
-                    rises=[i-1 for i in rises],
-                    valleys=[i-1 for i in valleys],
-                    _shift=_shift+_slope,
-                    _slope=_slope,
-                    _going_up=True):
-                yield [1] + p
+def _lattice_paths(width, height=None, shift=None, labelled=False, labels=None, decorated_rises=0, decorated_valleys=0):
 
-
-def _lattice_paths(width, height=None, dyck=True, labelled=True, labels=None, drises=0, dvalleys=0):
-
-    if height is None or width == height:
+    if height is None:
         # If no value is specified, the grid is assumed to be a square.
         height = width
-        if dyck is True:
-            item_class = DyckPath
-            parent = DyckPaths()
-        else:
-            item_class = SquarePath
-            parent = SquarePaths()
-    else:
-        if dyck is True:
-            item_class = RectangularDyckPath
-            parent = RectangularDyckPaths()
-        else:
-            item_class = RectangularPath
-            parent = RectangularPaths()
 
     # Sets the deafult set of labels to [n].
     if labels is None:
         labels = [0] + [1]*(height)
 
-    for r in combinations(range(1, height), drises):
-        for v in combinations([i for i in range(height) if i not in r], dvalleys):
-            for path in _generate_lattice_paths(width, height, rises=r, valleys=v, dyck=dyck):
+    for r in combinations(range(1, height), decorated_rises):
+        for v in combinations([i for i in range(height) if i not in r], decorated_valleys):
+            for path in _generate_lattice_paths(width, height, shift=shift, rises=r, valleys=v):
                 if labelled is False:
-                    yield item_class(parent, path, rises=r, valleys=v)
+                    yield path, None, r, v
                 else:
                     for l in LatticePath(LatticePaths(), path, rises=r, valleys=v).labellings(labels):
-                        yield item_class(parent, path, labels=l, rises=r, valleys=v)
+                        yield path, l, r, v
 
 
 def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
@@ -158,19 +196,34 @@ def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
                 yield chosen_labels + other_labels
 
 
+def _paths_size_shift(policy, width, height, shift, **kwargs):
+    if height == width:
+        if shift == 0:
+            return DyckPaths_size(policy, width, **kwargs)
+        else:
+            return SquarePaths_size_shift(policy, width, shift, **kwargs)
+    else:
+        if shift == 0:
+            return RectangularDyckPaths_size(policy, width, height, **kwargs)
+        else:
+            return RectangularPaths_size_shift(policy, width, height, shift, **kwargs)
+
+
+@add_metaclass(DynamicInheritComparisonClasscallMetaclass)
 class LatticePath(ClonableIntArray):
+
+    @staticmethod
+    def __classcall_private__(cls, *args, **kwargs):
+        return cls._auto_parent._element_constructor_(*args, **kwargs)
+
+    @lazy_class_attribute
+    def _auto_parent(cls):
+        return LatticePaths()
 
     def __init__(self, parent, path, labels=None, rises=[], valleys=[], latex_options={}):
 
-        super().__init__(parent, path)
-
-        # It's the actual path, stored as a string of 0's (east steps) and 1's (north steps)
         self.path = path
-
-        # It's the list of the labels of the path, to read bottom to top. Default is None.
         self.labels = labels
-
-        # These are the indices of the decorated rises and decorated valleys.
         self.rises = rises
         self.valleys = valleys
 
@@ -189,22 +242,14 @@ class LatticePath(ClonableIntArray):
         # Instruction on how to draw the path in LaTeX.
         self._latex_options = dict(latex_options)
 
+        ClonableIntArray.__init__(self, parent, path)
+
     def check(self):
-        pass
-        # if not (isinstance(self.path, list) and all(x in [0, 1] for x in self.path)):
-        #     raise ValueError(f'Invalid path (= {self.path}), entries must be 0 and 1.')
+        if not (isinstance(self.path, list) and all(x in [0, 1] for x in self.path)):
+            raise ValueError(f'Invalid path (= {self.path}), entries must be 0 and 1')
 
-        # if not self.valleys == []:
-        #     raise ValueError('Decorated valleys are only supported for square paths.')
-
-    def __len__(self):
-        return len(self.path)
-
-    def __getitem__(self, index):
-        return self.path[index]
-
-    def __repr__(self):
-        representation = f'{self.__class__.__name__}({self.path}'
+    def _repr_(self):
+        representation = f'{self.parent().Element.__name__}({self.path}'
         if self.labels is not None:
             representation += f', labels={self.labels}'
         if self.rises != []:
@@ -231,7 +276,7 @@ class LatticePath(ClonableIntArray):
             composition = [0] + [1]*self.height
 
         if not self.height == sum(composition):
-            raise ValueError('The number of labels does not match the size of the path.')
+            raise ValueError('The number of labels does not match the size of the path')
 
         # Find the composition given by the vertical steps of the path.
         peaks = [-1] + [i for i in range(self.height) if(
@@ -260,21 +305,6 @@ class LatticePath(ClonableIntArray):
         # Returns the area word of the path.
 
         return [self.main_diagonal()[i]-self.columns()[i] for i in range(self.height)]
-
-        # # This was more efficient without caching, but now it isn't.
-        # area_word = []  # Initializes the area word to an empty string.
-        # level = 0  # Sets starting level to 0.
-        # height = 0  # Sets starting height to 0.
-
-        # for i in self.path:
-        #     if i == 1:  # If the Dyck path has a vertical step, it adds a letter to the area word, and then goes up a level.
-        #         area_word += [level]
-        #         level += 1 if (height in self.rises or height in self.valleys) else self.slope
-        #         height += 1
-        #     else:  # If the Dyck path has a horizontal step, it goes down a level.
-        #         level -= 1
-
-        # return area_word
 
     @cached_method
     def main_diagonal(self):
@@ -371,7 +401,7 @@ class LatticePath(ClonableIntArray):
             # Reading word according to the pmaj statistic, i.e. along columns, bottom to top.
             return self.labels
         else:
-            raise ValueError('Reading order not recognised.')
+            raise ValueError('Reading order not recognised')
 
     def gessel(self, read=None):
         ls = Permutation([i for i in self.reading_word(read)[::-1] if i > 0], check_input=True)
@@ -450,22 +480,38 @@ class LatticePath(ClonableIntArray):
 
 
 class RectangularPath(LatticePath):
+
+    @staticmethod
+    def __classcall_private__(cls, *args, **kwargs):
+        return cls._auto_parent._element_constructor_(*args, **kwargs)
+
+    @lazy_class_attribute
+    def _auto_parent(cls):
+        return RectangularPaths()
+
     def check(self):
         pass
 
 
 class RectangularDyckPath(RectangularPath):
 
+    @staticmethod
+    def __classcall_private__(cls, *args, **kwargs):
+        return cls._auto_parent._element_constructor_(*args, **kwargs)
+
+    @lazy_class_attribute
+    def _auto_parent(cls):
+        return RectangularDyckPaths()
+
     def check(self):
-        pass
-        # if not (self.shift == 0):
-        #     raise ValueError(f'The path\'s shift is not 0.')
+        if not (self.shift == 0):
+            raise ValueError(f'The path\'s shift is not 0')
 
     def characteristic_function(self):
         # Returns the characteristic function of the path, computed in terms of d+ d- operators.
 
         if self.labels is not None or self.rises != [] or self.valleys != []:
-            raise NotImplementedError('The characteristic function can only be computed for plain paths.')
+            raise NotImplementedError('The characteristic function can only be computed for plain paths')
 
         return characteristic_function(self)
 
@@ -476,7 +522,7 @@ class RectangularDyckPath(RectangularPath):
         # In case of a tie, the leftmost step is sweeped first. The path is then reversed.
 
         if self.labels is not None or self.rises != [] or self.valleys != []:
-            raise NotImplementedError('The zeta map can only be computed for plain paths.')
+            raise NotImplementedError('The zeta map can only be computed for plain paths')
 
         def rank(x, y):
             # Gives the rank of the cell with cartesian coordinates (x,y).
@@ -491,8 +537,18 @@ class RectangularDyckPath(RectangularPath):
 
 
 class SquarePath(RectangularPath):
+
+    @staticmethod
+    def __classcall_private__(cls, *args, **kwargs):
+        return cls._auto_parent._element_constructor_(*args, **kwargs)
+
+    @lazy_class_attribute
+    def _auto_parent(cls):
+        return SquarePaths()
+
     def check(self):
-        pass
+        if not self.width == self.height:
+            raise ValueError('Height and width are not the same')
 
     def dinv(self):
         dinv = 0  # Initializes dinv to 0.
@@ -519,6 +575,15 @@ class SquarePath(RectangularPath):
 
 
 class DyckPath(SquarePath, RectangularDyckPath):
+
+    @staticmethod
+    def __classcall_private__(cls, *args, **kwargs):
+        return cls._auto_parent._element_constructor_(*args, **kwargs)
+
+    @lazy_class_attribute
+    def _auto_parent(cls):
+        return DyckPaths()
+
     def check(self):
         pass
 
@@ -561,213 +626,327 @@ class DyckPath(SquarePath, RectangularDyckPath):
         return parking_word
 
     def pmaj(self):
-        return sum(i for i in range(1, self.heigth) if self.parking_word()[-i] > self.parking_word()[-i-1])
+        return sum(i for i in range(1, self.height) if self.parking_word()[-i] > self.parking_word()[-i-1])
 
 
-class LatticePaths(UniqueRepresentation, Parent):
-
-    @ staticmethod
-    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
-                              dyck=False, square=False, decorated_rises=0, decorated_valleys=0,
-                              latex_options={}):
-        '''
-        Choose the correct parent
-        '''
-
-        if labels is not None:
-            if labelled is False:
-                raise ValueError('Cannot use the specified labels composition if labelling is False.')
-            elif ((height is not None and len(labels) != height)
-                  or (height is None and width is not None and len(labels) != width)):
-                raise ValueError('The cardinality of the set of labels does not match the path\'s height.')
-
-        if height is None and width is None:
-            return LatticePaths_all(dyck=dyck,
-                                    square=square,
-                                    labelled=labelled,
-                                    decorated_rises=decorated_rises,
-                                    decorated_valleys=decorated_valleys)
-
-        elif height is None or width is None or height == width:
-            if height is not None:
-                height = ZZ(height)
-            else:
-                height = ZZ(width)
-
-            if height < 0:
-                raise ValueError(f'Size (={height}) must be non-negative.')
-
-            return LatticePaths_size(width=height,
-                                     height=height,
-                                     dyck=dyck,
-                                     labelled=labelled,
-                                     labels=labels,
-                                     decorated_rises=decorated_rises,
-                                     decorated_valleys=decorated_valleys)
-        else:
-            height = ZZ(height)
-            width = ZZ(width)
-
-            if height < 0:
-                raise ValueError(f'Height (={height}) must be non-negative.')
-
-            if width < 0:
-                raise ValueError(f'Width (={width}) must be non-negative.')
-
-            return LatticePaths_size(width=width,
-                                     height=height,
-                                     dyck=dyck,
-                                     labelled=labelled,
-                                     labels=labels,
-                                     decorated_rises=decorated_rises,
-                                     decorated_valleys=decorated_valleys)
+class LatticePathsFactory(SetFactory):
     Element = LatticePath
 
-    # add options to class
-    class options(GlobalOptions):
-        r'''
-        Set and display the options for Lattice Paths. If no parameters
-        are set, then the function returns a copy of the options dictionary.
+    def __call__(self, width=None, height=None, shift=None, square=False, labelled=False, labels=None, decorated_rises=0, decorated_valleys=0, policy=None):
 
-        The ``options`` to Lattice Paths can be accessed as the method
-        :meth:`LatticePaths.options` of :class:`LatticePaths` and
-        related parent classes.
-        '''
+        if policy is None:
+            policy = self._default_policy
 
-        NAME = 'LatticePaths'
-        module = 'shuffle_theorem'
-        latex_tikz_scale = dict(default=1,
-                                description='The default value for the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_diagonal = dict(default=True,
-                              description='The default value for displaying the diagonal when latexed.',
-                              checker=lambda x: isinstance(x, bool))
-        latex_line_width = dict(default=2,
-                                description='The default value for the line width as a '
-                                'multiple of the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_colour = dict(default='blue!60',
-                            description='The default value for the colour when latexed.',
-                            checker=lambda x: isinstance(x, str))
-        latex_bounce_path = dict(default=False,
-                                 description='The default value for displaying the bounce path when latexed.',
-                                 checker=lambda x: isinstance(x, bool))
+        options = {
+            'labelled': labelled,
+            'decorated_rises': decorated_rises,
+            'decorated_valleys': decorated_valleys,
+        }
 
-    def _element_constructor_(self, word):
-        '''
-        Construct an element of ``self``.
+        if isinstance(width, (Integer, int)):
+            if height is None or height == width:
+                height = width
+            elif square is True:
+                raise ValueError('The paths are not square paths')
 
-        EXAMPLES::
+            if isinstance(shift, (Rational, Integer, int)):
+                return RectangularPaths_size_shift_redirect(policy, width, height, shift, **options)
+            elif height == width:
+                return SquarePaths_size(policy, width, **options)
+            else:
+                return RectangularPaths_size(policy, width, height, **options)
 
-            sage: LP = LatticePaths()
-            sage: path = LP([1, 1, 0, 1, 0, 0]); path
-            [1, 1, 0, 1, 0, 0]
-            sage: path.parent() is LP
-            True
-        '''
-        if isinstance(word, LatticePath) and word.parent() is self:
-            return word
-        return self.element_class(self, path=list(word))
+        elif width is None:
+            if height is not None:
+                raise ValueError('Must specify width if height is set')
+            if square is True:
+                if shift == 0:
+                    return DyckPaths_all(policy, **options)
+                elif shift is None:
+                    return SquarePaths_all(policy, **options)
+                else:
+                    raise ValueError('Can only set shift to 0 if the size is not specified')
+            else:
+                if shift == 0:
+                    return RectangularDyckPaths_all(policy, **options)
+                elif shift is None:
+                    return RectangularPaths_all(policy, **options)
+                else:
+                    raise ValueError('Can only set shift to 0 if the size is not specified')
+        else:
+            raise ValueError(f'Invalid size (={width})')
+
+        raise ValueError('If you\'re seeing this, something went horribly wrong')
+
+    def add_constraints(self, constraints, options):
+
+        constraints = _format_constraints(constraints, reverse=True)
+        defaults = _format_constraints((), reverse=True)
+        keys = defaults.keys()
+        args, kwargs = options
+
+        for i, arg in enumerate(args):
+            if arg != defaults[keys[i]] and arg != constraints[keys[i]]:
+                constraints[keys[i]] = arg
+
+        for i, key in enumerate(defaults):
+            if key in kwargs and kwargs[key] != defaults[key] and kwargs[key] != constraints[key]:
+                constraints[key] = kwargs[key]
+
+        return [constraints[key] for key in keys]
+
+    @lazy_attribute
+    def _default_policy(self):
+        return SelfParentPolicy(self, self.Element)
 
 
-class RectangularPaths(LatticePaths):
-    @ staticmethod
-    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
-                              dyck=False, decorated_rises=0, decorated_valleys=0):
+def RectangularPaths(*args, **kwargs):
+    options = _format_constraints((args, kwargs))
+    return LatticePaths(*options)
 
-        return LatticePaths(width=width, height=height, labelled=labelled, labels=labels,
-                            dyck=dyck, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
 
+def RectangularDyckPaths(*args, **kwargs):
+    options = _format_constraints((args, {**kwargs, 'shift': 0}))
+    return LatticePaths(*options)
+
+
+def SquarePaths(*args, **kwargs):
+    options = _format_constraints((args, {**kwargs, 'square': True}))
+    return LatticePaths(*options)
+
+
+def DyckPaths(*args, **kwargs):
+    options = _format_constraints((args, {**kwargs, 'shift': 0, 'square': True}))
+    return LatticePaths(*options)
+
+
+LatticePaths = LatticePathsFactory()
+LatticePaths.__doc__ = LatticePathsFactory.__call__.__doc__
+
+
+class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, **kwargs):
+        self._kwargs = kwargs
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), kwargs)), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                EnumeratedSetFromIterator(cantor_product,
+                                          ([PositiveIntegers(), PositiveIntegers()]),
+                                          category=InfiniteEnumeratedSets(),
+                                          ),
+                lambda c: RectangularPaths_size(
+                    policy=self.facade_policy(), width=c[0], height=c[1], **kwargs
+                )
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+
+    def __repr__(self):
+        return 'Rectangular Paths'
+
+    def check_element(self, element, check=True):
+        return True
+
+
+class RectangularDyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, **kwargs):
+        self._kwargs = kwargs
+
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'shift': 0})), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                EnumeratedSetFromIterator(cantor_product,
+                                          ([PositiveIntegers(), PositiveIntegers()]),
+                                          category=InfiniteEnumeratedSets(),
+                                          ),
+                lambda c: _paths_size_shift(self.facade_policy(), c[0], c[1], 0, **kwargs)
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+
+    def __repr__(self):
+        return f'Rectangular Dyck Paths'
+
+    def check_element(self, element, check=True):
+        return True
+
+
+class SquarePaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, **kwargs):
+        self._kwargs = kwargs
+
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'square': True})), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                PositiveIntegers(),
+                lambda size: SquarePaths_size(
+                    policy=self.facade_policy(), size=size, **kwargs
+                )
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+
+    def __repr__(self):
+        return 'Square Paths'
+
+    def check_element(self, element, check=True):
+        return True
+
+
+class DyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, **kwargs):
+        self._kwargs = kwargs
+
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'square': True, 'shift': 0})), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                PositiveIntegers(),
+                lambda size: _paths_size_shift(self.facade_policy(), size, size, 0, **kwargs)
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+
+    def __repr__(self):
+        return 'Dyck Paths'
+
+    def check_element(self, element, check=True):
+        return True
+
+
+class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, width, height, **kwargs):
+        self._width = width
+        self._height = height
+        self._kwargs = kwargs
+
+        if self._width == self._height:
+            square = True
+        else:
+            square = False
+
+        adjusted_height = height
+
+        if 'decorated rises' in kwargs:
+            adjusted_height -= kwargs['decorated_rises']
+        if 'decorated_valleys' in kwargs:
+            adjusted_height -= kwargs['decorated_valleys']
+
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'height': height, 'width': width, 'square': square})), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                [Rational(i/adjusted_height) for i in range((width-1)*adjusted_height+1)],
+                lambda shift: _paths_size_shift(self.facade_policy(), width, height, shift, **kwargs)
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+        print(self.facade_policy())
+
+    def __repr__(self):
+        return f'Rectangular Paths of size {self._width, self._height}'
+
+    def check_element(self, element, check=True):
+        return True
+
+
+class SquarePaths_size(RectangularPaths_size):
+
+    def __init__(self, policy, size, **kwargs):
+        super().__init__(policy, size, size, **kwargs)
+
+    def __repr__(self):
+        return f'Square paths of size {self._width}'
+
+
+class RectangularPaths_size_shift_redirect(ParentWithSetFactory, DisjointUnionEnumeratedSets):
+
+    def __init__(self, policy, width, height, shift, **kwargs):
+
+        if width == height:
+            square = True
+        else:
+            square = False
+
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'width': width, 'height': height, 'shift': shift, 'square': square})), policy, category=FiniteEnumeratedSets()
+        )
+        DisjointUnionEnumeratedSets.__init__(
+            self, Family(
+                [x for x in range(1)],
+                lambda x: _paths_size_shift(self.facade_policy(), width, height, shift, **kwargs)
+            ),
+            facade=True, keepkey=False, category=self.category()
+        )
+
+
+class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
     Element = RectangularPath
 
+    def __init__(self, policy, width, height, shift, **kwargs):
+        self._width = width
+        self._height = height
+        self._shift = shift
+        self._kwargs = kwargs
 
-class RectangularDyckPaths(RectangularPaths):
-    @ staticmethod
-    def __classcall_private__(cls, width=None, height=None, labelled=True, labels=None,
-                              decorated_rises=0, decorated_valleys=0):
+        if self._width == self._height:
+            square = True
+        else:
+            square = False
 
-        return LatticePaths(width=width, height=height, labelled=labelled, labels=labels,
-                            dyck=True, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
+        ParentWithSetFactory.__init__(
+            self, _format_constraints(((), {**kwargs, 'height': height, 'width': width, 'shift': shift, 'square': square})), policy, category=FiniteEnumeratedSets()
+        )
 
+    def __repr__(self):
+        return f'Rectangular Paths of size {self._width, self._height} with shift {self._shift}'
+
+    def an_element(self):
+        return next(self.__iter__())
+
+    def __iter__(self):
+        for x in _lattice_paths(self._width, self._height, shift=self._shift, **self._kwargs):
+            yield self.element_class(self, *x)
+
+
+class RectangularDyckPaths_size(RectangularPaths_size_shift):
     Element = RectangularDyckPath
 
+    def __init__(self, policy, width, height, **kwargs):
+        super().__init__(policy, width, height, 0, **kwargs)
 
-class SquarePaths(RectangularPaths):
-    @ staticmethod
-    def __classcall_private__(cls, size=None, labelled=True, labels=None,
-                              dyck=False, decorated_rises=0, decorated_valleys=0):
+    def __repr__(self):
+        return f'Rectangular Dyck paths of size {self._width, self._height}'
 
-        return LatticePaths(height=size, width=size, square=True, labelled=labelled, labels=labels,
-                            dyck=dyck, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
 
+class SquarePaths_size_shift(RectangularPaths_size_shift):
     Element = SquarePath
 
+    def __init__(self, policy, size, shift, **kwargs):
+        super().__init__(policy, size, size, shift, **kwargs)
 
-class DyckPaths(SquarePaths, RectangularDyckPaths):
-    @ staticmethod
-    def __classcall_private__(cls, size=None, labelled=True, labels=None,
-                              decorated_rises=0, decorated_valleys=0):
+    def __repr__(self):
+        return f'Square paths of size {self._width} with shift {self._shift}'
 
-        return LatticePaths(height=size, width=size, labelled=labelled, labels=labels,
-                            dyck=True, square=True, decorated_rises=decorated_rises, decorated_valleys=decorated_valleys)
 
+class DyckPaths_size(SquarePaths_size_shift):
     Element = DyckPath
 
+    def __init__(self, policy, size, **kwargs):
+        super().__init__(policy, size, 0, **kwargs)
 
-class LatticePaths_all(LatticePaths):
-    '''
-    All lattice paths.
-    '''
-
-    def __init__(self, dyck=False, square=False, labelled=True, decorated_rises=0, decorated_valleys=0):
-        super().__init__(category=InfiniteEnumeratedSets())
-
-        self.dyck = dyck
-        self.square = square
-        self.labelled = labelled
-        self.decorated_rises = decorated_rises
-        self.decorated_valleys = decorated_valleys
-
-    def __iter__(self):
-
-        if self.square is True:
-            size = 0
-            while True:
-                for x in _lattice_paths(width=size, height=size, dyck=self.dyck,
-                                        labelled=self.labelled, labels=None,
-                                        drises=self.decorated_rises, dvalleys=self.decorated_valleys):
-                    yield x
-                size += 1
-        else:
-            semiperimeter = 0
-            while True:
-                for height in range(0, semiperimeter+1):
-                    for x in _lattice_paths(width=semiperimeter-height, height=height, dyck=self.dyck,
-                                            labelled=self.labelled, labels=None,
-                                            drises=self.decorated_rises, dvalleys=self.decorated_valleys):
-                        yield x
-                semiperimeter += 1
-
-
-class LatticePaths_size(LatticePaths):
-    '''
-    All lattice paths with a given size.
-    '''
-
-    def __init__(self, width=None, height=None, dyck=False, labelled=True, labels=None, decorated_rises=0, decorated_valleys=0):
-        super().__init__(category=FiniteEnumeratedSets())
-
-        self.height = height
-        self.width = width
-        self.dyck = dyck
-        self.labelled = labelled
-        self.labels = labels
-        self.decorated_rises = decorated_rises
-        self.decorated_valleys = decorated_valleys
-
-    def __iter__(self):
-
-        for x in _lattice_paths(width=self.width, height=self.height, dyck=self.dyck,
-                                labelled=self.labelled, labels=self.labels,
-                                drises=self.decorated_rises, dvalleys=self.decorated_valleys):
-            yield x
+    def __repr__(self):
+        return f'Dyck paths of size {self._width}'
