@@ -751,6 +751,36 @@ class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
     def check_element(self, element, check=True):
         return True
 
+    # add options to class
+    class options(GlobalOptions):
+        r'''
+        Set and display the options for Lattice Paths. If no parameters
+        are set, then the function returns a copy of the options dictionary.
+
+        The ``options`` to Lattice Paths can be accessed as the method
+        :meth:`LatticePaths.options` of :class:`LatticePaths` and
+        related parent classes.
+        '''
+
+        NAME = 'LatticePaths'
+        module = 'shuffle_theorem'
+        latex_tikz_scale = dict(default=1,
+                                description='The default value for the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_diagonal = dict(default=True,
+                              description='The default value for displaying the diagonal when latexed.',
+                              checker=lambda x: isinstance(x, bool))
+        latex_line_width = dict(default=2,
+                                description='The default value for the line width as a '
+                                'multiple of the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_colour = dict(default='blue!60',
+                            description='The default value for the colour when latexed.',
+                            checker=lambda x: isinstance(x, str))
+        latex_bounce_path = dict(default=False,
+                                 description='The default value for displaying the bounce path when latexed.',
+                                 checker=lambda x: isinstance(x, bool))
+
 
 class RectangularDyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
 
@@ -777,6 +807,36 @@ class RectangularDyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets
     def check_element(self, element, check=True):
         return True
 
+    # add options to class
+    class options(GlobalOptions):
+        r'''
+        Set and display the options for Lattice Paths. If no parameters
+        are set, then the function returns a copy of the options dictionary.
+
+        The ``options`` to Lattice Paths can be accessed as the method
+        :meth:`LatticePaths.options` of :class:`LatticePaths` and
+        related parent classes.
+        '''
+
+        NAME = 'LatticePaths'
+        module = 'shuffle_theorem'
+        latex_tikz_scale = dict(default=1,
+                                description='The default value for the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_diagonal = dict(default=True,
+                              description='The default value for displaying the diagonal when latexed.',
+                              checker=lambda x: isinstance(x, bool))
+        latex_line_width = dict(default=2,
+                                description='The default value for the line width as a '
+                                'multiple of the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_colour = dict(default='blue!60',
+                            description='The default value for the colour when latexed.',
+                            checker=lambda x: isinstance(x, str))
+        latex_bounce_path = dict(default=False,
+                                 description='The default value for displaying the bounce path when latexed.',
+                                 checker=lambda x: isinstance(x, bool))
+
 
 class SquarePaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
 
@@ -802,6 +862,36 @@ class SquarePaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
     def check_element(self, element, check=True):
         return True
 
+    # add options to class
+    class options(GlobalOptions):
+        r'''
+        Set and display the options for Lattice Paths. If no parameters
+        are set, then the function returns a copy of the options dictionary.
+
+        The ``options`` to Lattice Paths can be accessed as the method
+        :meth:`LatticePaths.options` of :class:`LatticePaths` and
+        related parent classes.
+        '''
+
+        NAME = 'LatticePaths'
+        module = 'shuffle_theorem'
+        latex_tikz_scale = dict(default=1,
+                                description='The default value for the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_diagonal = dict(default=True,
+                              description='The default value for displaying the diagonal when latexed.',
+                              checker=lambda x: isinstance(x, bool))
+        latex_line_width = dict(default=2,
+                                description='The default value for the line width as a '
+                                'multiple of the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_colour = dict(default='blue!60',
+                            description='The default value for the colour when latexed.',
+                            checker=lambda x: isinstance(x, str))
+        latex_bounce_path = dict(default=False,
+                                 description='The default value for displaying the bounce path when latexed.',
+                                 checker=lambda x: isinstance(x, bool))
+
 
 class DyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
 
@@ -824,6 +914,36 @@ class DyckPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
 
     def check_element(self, element, check=True):
         return True
+
+    # add options to class
+    class options(GlobalOptions):
+        r'''
+        Set and display the options for Lattice Paths. If no parameters
+        are set, then the function returns a copy of the options dictionary.
+
+        The ``options`` to Lattice Paths can be accessed as the method
+        :meth:`LatticePaths.options` of :class:`LatticePaths` and
+        related parent classes.
+        '''
+
+        NAME = 'LatticePaths'
+        module = 'shuffle_theorem'
+        latex_tikz_scale = dict(default=1,
+                                description='The default value for the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_diagonal = dict(default=True,
+                              description='The default value for displaying the diagonal when latexed.',
+                              checker=lambda x: isinstance(x, bool))
+        latex_line_width = dict(default=2,
+                                description='The default value for the line width as a '
+                                'multiple of the tikz scale when latexed.',
+                                checker=lambda x: True)  # More trouble than it's worth to check
+        latex_colour = dict(default='blue!60',
+                            description='The default value for the colour when latexed.',
+                            checker=lambda x: isinstance(x, str))
+        latex_bounce_path = dict(default=False,
+                                 description='The default value for displaying the bounce path when latexed.',
+                                 checker=lambda x: isinstance(x, bool))
 
 
 class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
