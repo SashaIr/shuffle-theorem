@@ -833,7 +833,7 @@ class SquarePaths_all(RectangularPaths_all):
         return True
 
 
-class DyckPaths_all(SquarePaths_all, RectangularDyckPaths_all):  # , ParentWithSetFactory, DisjointUnionEnumeratedSets):
+class DyckPaths_all(SquarePaths_all, RectangularDyckPaths_all):
 
     def __init__(self, policy, **kwargs):
         self._kwargs = kwargs
