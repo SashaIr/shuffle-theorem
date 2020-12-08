@@ -8,6 +8,7 @@ Tools for the shuffle theorem and variants.
 from itertools import combinations, product
 from more_itertools import distinct_combinations
 from multiset import Multiset
+from sage.categories.category_types import Elements
 from six import add_metaclass
 
 from sage.arith.misc import gcd
@@ -218,7 +219,7 @@ class LatticePath(ClonableIntArray):
 
     @lazy_class_attribute
     def _auto_parent(cls):
-        return LatticePaths()
+        return RectangularPaths_all(SelfParentPolicy(LatticePaths, cls))
 
     def __init__(self, parent, path, labels=None, rises=[], valleys=[], latex_options={}):
 
@@ -354,12 +355,8 @@ class LatticePath(ClonableIntArray):
         for i in range(self.height):
             temp_dinv += len([j for j in range(self.height) if (
                 (self.labels is None or self.labels[i] < self.labels[j]) and (
-                    (self.area_word()[i] == self.area_word()[j] and i < j)
-                    or (i+1 not in self.rises
-                        and self.area_word()[i] < self.area_word()[j] < self.area_word()[i] + self.slope)
-                    or (i+1 in self.rises
-                        and self.area_word()[i] < self.area_word()[j] < self.area_word()[i] + 1)
-                ))])
+                    (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i+1 in self.rises else self.slope), i))
+            )])
 
         ferrer_dinv = 0
         ferrer = self.ferrer()
@@ -462,7 +459,7 @@ class LatticePath(ClonableIntArray):
         x = y = 0
         for i in self.path:
             if i == 1 and self.labels is not None:
-                labels += f'    \\draw ({x+0.5:+.1f},{y+0.5:+.1f}) circle (0.4cm) node {{${self.labels[y]}$}};'
+                labels += f'    \\draw ({x+0.5:.1f},{y+0.5:.1f}) circle (0.4cm) node {{${self.labels[y]}$}};\n'
             x += 1 - i
             y += i
             tikz += f' -- ({x},{y})'
@@ -485,10 +482,6 @@ class RectangularPath(LatticePath):
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
-    @lazy_class_attribute
-    def _auto_parent(cls):
-        return RectangularPaths()
-
     def check(self):
         pass
 
@@ -498,10 +491,6 @@ class RectangularDyckPath(RectangularPath):
     @staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
-
-    @lazy_class_attribute
-    def _auto_parent(cls):
-        return RectangularDyckPaths()
 
     def check(self):
         if not (self.shift == 0):
@@ -542,10 +531,6 @@ class SquarePath(RectangularPath):
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
-    @lazy_class_attribute
-    def _auto_parent(cls):
-        return SquarePaths()
-
     def check(self):
         if not self.width == self.height:
             raise ValueError('Height and width are not the same')
@@ -556,7 +541,8 @@ class SquarePath(RectangularPath):
         # Goes through the letters of the area word.
         for i in range(self.height):
             if self.area_word()[i] < 0:  # Bonus dinv
-                dinv += 1
+                if self.labels is None or self.labels[i] > 0:
+                    dinv += 1
             if i not in self.valleys:  # Skip decorated valleys
                 for j in range(i+1, self.height):  # Looks at the right.
                     if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
@@ -579,10 +565,6 @@ class DyckPath(SquarePath, RectangularDyckPath):
     @staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
-
-    @lazy_class_attribute
-    def _auto_parent(cls):
-        return DyckPaths()
 
     def check(self):
         pass
