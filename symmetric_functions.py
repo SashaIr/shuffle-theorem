@@ -17,17 +17,19 @@ from sage.rings.all import PolynomialRing, QQ
 
 
 # Define q, t, u.
-QQ['q', 't', 'u'].fraction_field().inject_variables(verbose=False)
-q = QQ['q', 't', 'u'].fraction_field().gens()[0]
-t = QQ['q', 't', 'u'].fraction_field().gens()[1]
-u = QQ['q', 't', 'u'].fraction_field().gens()[2]
+QQ['q', 't', 'u', 'v', 'z'].fraction_field().inject_variables(verbose=False)
+q = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[0]
+t = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[1]
+u = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[2]
+v = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[3]
+z = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[4]
 
 # Define the Symmetric Functions algebra over Q.
 Sym = SymmetricFunctions(QQ)
 Sym.inject_shorthands(verbose=False)
 
 # Define the Symmetric Functions algebra over Q(q,t).
-Symqt = SymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
+Symqt = SymmetricFunctions(QQ['q', 't', 'u', 'v', 'z'].fraction_field())
 Symqt.inject_shorthands(verbose=False)
 H = Symqt.macdonald().Ht()
 
@@ -36,7 +38,7 @@ QSym = QuasiSymmetricFunctions(QQ)
 QSym.inject_shorthands(verbose=False)
 
 # Define the QuasiSymmetric Functions algebra over Q(q,t).
-QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
+QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u', 'v', 'z'].fraction_field())
 QSymqt.inject_shorthands(verbose=False)
 
 
@@ -223,7 +225,7 @@ def B_alpha(alpha, f=Symqt.schur()[0]):
         return B_alpha(alpha[1:], sf)
 
 
-def E(n, k):
+def E_nk(n, k):
     # The E_{n,k} symmetric functions.
     return sum([C_alpha(alpha, Symqt.schur()[0]) for alpha in Compositions(n) if len(alpha) == k])
 
@@ -308,7 +310,7 @@ def E_mn(m, n, r):
         return 0
     else:
         d = gcd(m, n)
-        return F_mn(m/d, n/d, E(d, r) * Symqt.schur()[0])
+        return F_mn(m/d, n/d, E_nk(d, r) * Symqt.schur()[0])
 
 
 def C_alpha_mn(m, n, alpha, f=Symqt.schur()[0]):
@@ -350,8 +352,18 @@ def uu(k):
 
 
 @cached_function
+def vv(k):
+    return RR(k).gen(3)
+
+
+@cached_function
+def zz(k):
+    return RR(k).gen(4)
+
+
+@cached_function
 def yy(k, i):
-    return RR(k).gen(i+3)
+    return RR(k).gen(i+5)
 
 
 @cached_function

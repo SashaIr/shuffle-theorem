@@ -46,7 +46,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
         else:
             raise EnvironmentError('OS not supported.')
 
-    os.system(pdf_viewer + ' ' + folder + '/Temp/' + filename + '.pdf')
+    os.system(pdf + ' ' + folder + '/Temp/' + filename + '.pdf')
 
     return None
 
