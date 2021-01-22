@@ -20,6 +20,9 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     Can specify a pdf viewer by passing the corresponding command line executable.
     '''
 
+    # Create the folder.
+    os.system('mkdir -p ' + folder)
+
     # Create the LaTeX file.
     with open(folder + '/' + filename + '.tex', 'w') as f:
         f.write(latex)
@@ -45,6 +48,8 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
             pdf = 'cygstart'
         else:
             raise EnvironmentError('OS not supported.')
+    else:
+        pdf = pdf_viewer
 
     os.system(pdf + ' ' + folder + '/Temp/' + filename + '.pdf')
 
