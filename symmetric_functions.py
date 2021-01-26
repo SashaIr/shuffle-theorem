@@ -17,19 +17,17 @@ from sage.rings.all import PolynomialRing, QQ
 
 
 # Define q, t, u.
-QQ['q', 't', 'u', 'v', 'z'].fraction_field().inject_variables(verbose=False)
-q = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[0]
-t = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[1]
-u = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[2]
-v = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[3]
-z = QQ['q', 't', 'u', 'v', 'z'].fraction_field().gens()[4]
+QQ['q', 't', 'u'].fraction_field().inject_variables(verbose=False)
+q = QQ['q', 't', 'u'].fraction_field().gens()[0]
+t = QQ['q', 't', 'u'].fraction_field().gens()[1]
+u = QQ['q', 't', 'u'].fraction_field().gens()[2]
 
 # Define the Symmetric Functions algebra over Q.
 Sym = SymmetricFunctions(QQ)
 Sym.inject_shorthands(verbose=False)
 
 # Define the Symmetric Functions algebra over Q(q,t).
-Symqt = SymmetricFunctions(QQ['q', 't', 'u', 'v', 'z'].fraction_field())
+Symqt = SymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
 Symqt.inject_shorthands(verbose=False)
 H = Symqt.macdonald().Ht()
 
@@ -38,7 +36,7 @@ QSym = QuasiSymmetricFunctions(QQ)
 QSym.inject_shorthands(verbose=False)
 
 # Define the QuasiSymmetric Functions algebra over Q(q,t).
-QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u', 'v', 'z'].fraction_field())
+QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
 QSymqt.inject_shorthands(verbose=False)
 
 
@@ -352,18 +350,8 @@ def uu(k):
 
 
 @cached_function
-def vv(k):
-    return RR(k).gen(3)
-
-
-@cached_function
-def zz(k):
-    return RR(k).gen(4)
-
-
-@cached_function
 def yy(k, i):
-    return RR(k).gen(i+5)
+    return RR(k).gen(i+3)
 
 
 @cached_function
