@@ -301,6 +301,14 @@ class LatticePath(ClonableIntArray):
 
         return labellings
 
+    def characteristic_function(self):
+        # Returns the characteristic function of the path, computed in terms of d+ d- operators.
+
+        # if self.labels is not None or self.rises != [] or self.valleys != []:
+        #     raise NotImplementedError('The characteristic function can only be computed for plain paths')
+
+        return characteristic_function(self)
+
     @cached_method
     def area_word(self):
         # Returns the area word of the path.
@@ -377,6 +385,9 @@ class LatticePath(ClonableIntArray):
 
     def zero(self):
         return 0
+
+    def rank(self, i, j):
+        return self.main_diagonal()[j]-i
 
     def diagonal_word(self):
         # Returns the word obtained by sorting the diagonals in decreasing order, bottom to top.
@@ -495,14 +506,6 @@ class RectangularDyckPath(RectangularPath):
     def check(self):
         if not (self.shift == 0):
             raise ValueError(f'The path\'s shift is not 0')
-
-    def characteristic_function(self):
-        # Returns the characteristic function of the path, computed in terms of d+ d- operators.
-
-        if self.labels is not None or self.rises != [] or self.valleys != []:
-            raise NotImplementedError('The characteristic function can only be computed for plain paths')
-
-        return characteristic_function(self)
 
     def zeta(self):
         # https://www.combinatorics.org/ojs/index.php/eljc/article/view/v24i1p64
@@ -683,6 +686,10 @@ class LatticePathsFactory(SetFactory):
         return SelfParentPolicy(self, self.Element)
 
 
+LatticePaths = LatticePathsFactory()
+LatticePaths.__doc__ = LatticePathsFactory.__call__.__doc__
+
+
 def RectangularPaths(*args, **kwargs):
     options = _format_constraints((args, kwargs))
     return LatticePaths(*options)
@@ -701,10 +708,6 @@ def SquarePaths(*args, **kwargs):
 def DyckPaths(*args, **kwargs):
     options = _format_constraints((args, {**kwargs, 'shift': 0, 'square': True}))
     return LatticePaths(*options)
-
-
-LatticePaths = LatticePathsFactory()
-LatticePaths.__doc__ = LatticePathsFactory.__call__.__doc__
 
 
 class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):

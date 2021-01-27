@@ -57,22 +57,22 @@ def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
 
 def characteristic_function(path):
 
-    if not (path.labels == None and path.rises == [] and path.valleys == []):
-        raise ValueError('I can only compute the characteristic funcion of a plain path.')
+    # if not (path.labels == None and path.rises == [] and path.valleys == []):
+    #     raise ValueError('I can only compute the characteristic funcion of a plain path.')
 
     def is_under(i, j):
         assert 0 <= i <= path.width and 0 <= j <= path.height
 
         if j == 0:
             return bool(i == 0)
-        elif path.column(j-1) <= i <= j/path.slope:
+        elif path.columns()[j-1] <= i <= path.main_diagonal()[j]:
             return True
         else:
             return False
 
     collisions = [(i, j) for i in range(path.width+1) for j in range(path.height+1) if is_under(i, j)]
-    collisions = sorted(collisions, key=lambda c: path.rank(*c), reverse=True)
-
+    collisions = sorted(collisions, key=lambda c: (path.rank(*c), c[1]), reverse=True)
+    
     f = XX0(0)
     level = 0
 
@@ -82,8 +82,9 @@ def characteristic_function(path):
         elif c == (path.width, path.height):
             f = dminus(f, level)
             level -= 1
-        elif c[1] < path.height and path.column(c[1]) < c[0]:
-            f *= t
+        elif c[1] < path.height and path.columns()[c[1]] < c[0]:
+            if c[1] not in path.rises:
+                f *= t
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 0:
             f = dplus(f, level)
             level += 1
@@ -91,10 +92,10 @@ def characteristic_function(path):
             f = dminus(f, level)
             level -= 1
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 1:
-            exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.column(h)-c[0])+c[1] <= h+1])
+            exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f = q**(-exp)*(dminus(dplus(f, level), level+1) - dplus(dminus(f, level), level-1))/(q-1)
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 0:
-            exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.column(h)-c[0])+c[1] <= h+1])
+            exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f *= q**exp
         else:
             raise ValueError('Something went wrong here.')
@@ -106,9 +107,9 @@ def qteval(f, q=q, t=t):
     if f == 0:
         return 0
     elif QSymqt.Fundamental()(f).is_symmetric():
-        return sum(cf.subs(q=q, t=t)*Symqt.schur(mu) for (mu, cf) in Symqt.schur()(f))
+        return sum(cf.subs(q=q, t=t)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
     else:
-        return sum(cf.subs(q=q, t=t)*QSymqt.Fundamental(mu) for (mu, cf) in QSymqt.Fundamental()(f))
+        return sum(cf.subs(q=q, t=t)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
 
 
 def omega(f):
