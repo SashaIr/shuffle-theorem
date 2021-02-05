@@ -72,7 +72,7 @@ def characteristic_function(path):
 
     collisions = [(i, j) for i in range(path.width+1) for j in range(path.height+1) if is_under(i, j)]
     collisions = sorted(collisions, key=lambda c: (path.rank(*c), c[1]), reverse=True)
-    
+
     f = XX0(0)
     level = 0
 
@@ -231,7 +231,13 @@ def E_nk(n, k):
 
 # Stuff from Bergeron's file
 
-def Q_mn(m, n, mu=[1], f=Symqt.schur()[0]):
+def Q_mn(m, n, mu=None, f=None):
+
+    if mu == None:
+        mu = [1]
+    if f == None:
+        f = Symqt.schur()[0]
+
     if len(mu) == 0:
         return f
     elif len(mu) == 1:
@@ -240,6 +246,9 @@ def Q_mn(m, n, mu=[1], f=Symqt.schur()[0]):
         elif n == 0:
             return f-(1-q)*(1-t)*Delta(Symqt.schur()[1], f)
         else:
+            m *= mu[0]
+            n *= mu[0]
+
             (d, n1, m1) = xgcd(m, n)
 
             if m1 > 0:
