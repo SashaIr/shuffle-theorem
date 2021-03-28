@@ -5,14 +5,12 @@ Tools for the shuffle theorem and variants.
 
 # TODO: Write documentation!
 
-from itertools import combinations, product
+from itertools import combinations
 from more_itertools import distinct_combinations
 from multiset import Multiset
-from sage.categories.category_types import Elements
 from six import add_metaclass
 
 from sage.arith.misc import gcd
-from sage.categories.cartesian_product import cartesian_product
 from sage.categories.finite_enumerated_sets import FiniteEnumeratedSets
 from sage.categories.infinite_enumerated_sets import InfiniteEnumeratedSets
 from sage.combinat.composition import Composition
@@ -21,22 +19,20 @@ from sage.combinat.permutation import Permutation
 from sage.functions.other import floor
 from sage.misc.all import cached_method, lazy_attribute, lazy_class_attribute
 from sage.misc.latex import latex
-from sage.misc.mrange import cantor_product, cartesian_product_iterator
-from sage.rings.all import ZZ, Integer, Rational
+from sage.misc.mrange import cantor_product
+from sage.rings.all import Integer, Rational
 from sage.sets.disjoint_union_enumerated_sets import \
     DisjointUnionEnumeratedSets
 from sage.sets.family import Family
 from sage.sets.positive_integers import PositiveIntegers
 from sage.sets.set_from_iterator import EnumeratedSetFromIterator
-from sage.structure.all import Parent
 from sage.structure.dynamic_class import \
     DynamicInheritComparisonClasscallMetaclass
 from sage.structure.global_options import GlobalOptions
 from sage.structure.list_clone import ClonableIntArray  # type: ignore
-from sage.structure.set_factories import (BareFunctionPolicy, ParentWithSetFactory,
-                                          FacadeParentPolicy,
-                                          SelfParentPolicy, SetFactory,
-                                          TopMostParentPolicy)
+from sage.structure.set_factories import (ParentWithSetFactory,
+                                          SelfParentPolicy,
+                                          SetFactory)
 from sage.structure.unique_representation import UniqueRepresentation
 
 from .symmetric_functions import characteristic_function
@@ -309,6 +305,43 @@ class LatticePath(ClonableIntArray):
 
         return characteristic_function(self)
 
+    def word(self):
+
+        def is_under(i, j):
+
+            if j == 0:
+                return bool(i == 0)
+            elif self.columns()[j-1] <= i <= self.main_diagonal()[j]:
+                return True
+            else:
+                return False
+
+        collisions = [(i, j) for i in range(self.width+1) for j in range(self.height+1) if is_under(i, j)]
+        collisions = sorted(collisions, key=lambda c: (self.rank(*c), c[1]), reverse=True)
+
+        level = 0
+        word = []
+
+        for c in collisions:
+            if c == (0, 0):
+                pass
+            elif c == (self.width, self.height):
+                word += ['d-']
+            elif c[1] < self.height and self.columns()[c[1]] < c[0]:
+                pass
+            elif self.path[c[0]+c[1]-1] == 1 and self.path[c[0]+c[1]] == 0:
+                word += ['d+']
+            elif self.path[c[0]+c[1]-1] == 0 and self.path[c[0]+c[1]] == 1:
+                word += ['d-']
+            elif self.path[c[0]+c[1]-1] == 1 and self.path[c[0]+c[1]] == 1:
+                word += ['[]']
+            elif self.path[c[0]+c[1]-1] == 0 and self.path[c[0]+c[1]] == 0:
+                pass
+            else:
+                raise ValueError('Something went wrong here.')
+
+        return word[::-1]
+
     @cached_method
     def area_word(self):
         # Returns the area word of the path.
@@ -321,10 +354,18 @@ class LatticePath(ClonableIntArray):
 
         main_diagonal = [0]
         position = 0
+        block_height = 1
 
         for i in range(self.height):
-            position += 1 if (i in self.rises or i in self.valleys) else self.slope
-            main_diagonal += [position]
+            # position += 1 if (i in self.rises or i in self.valleys) else self.slope
+            # main_diagonal += [position]
+            if i+1 in self.rises:
+                block_height += 1
+            else:
+                main_diagonal += [position+Rational((block_height+self.slope-1)*(i+1)/block_height)
+                                  for i in range(block_height)]
+                position += block_height-1+self.slope
+                block_height = 1
 
         return main_diagonal
 
@@ -433,7 +474,12 @@ class LatticePath(ClonableIntArray):
         if 'line width' not in path_latex_options:
             path_latex_options['line width'] = self.parent().options.latex_line_width * \
                 path_latex_options['tikz_scale']
-
+        if 'show_stats' not in path_latex_options:
+            path_latex_options['show_stats'] = self.parent().options.latex_show_stats
+        if 'qstat' not in path_latex_options:
+            path_latex_options['qstat'] = self.parent().options.latex_qstat
+        if 'tstat' not in path_latex_options:
+            path_latex_options['tstat'] = self.parent().options.latex_tstat
         return path_latex_options
 
     def _latex_(self):
@@ -484,12 +530,24 @@ class LatticePath(ClonableIntArray):
             valleys += '    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
                 [sum(self.path[:j]) for j in range(self.length)].index(i+1)-(i+1)-0.5, (i+1)-0.5)
 
-        return (tikz + labels + rises + valleys + '\\end{tikzpicture}')
+        if latex_options['show_stats'] == True:
+            stats = '\n'
+            stats += '      \\node[below left] at (%d,0) {' % (self.width)
+
+            colour = 0
+            colours = ['blue', 'red', 'green']
+
+            for stat in [repr(latex_options['qstat']), repr(latex_options['tstat'])]:
+                stats += ' \\color{%s}{$%d$}' % (colours[colour % 3], getattr(self, stat)())
+                colour += 1
+            stats += '};\n'
+
+        return (tikz + labels + rises + valleys + stats + '\\end{tikzpicture}')
 
 
 class RectangularPath(LatticePath):
 
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
@@ -499,7 +557,7 @@ class RectangularPath(LatticePath):
 
 class RectangularDyckPath(RectangularPath):
 
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
@@ -530,7 +588,7 @@ class RectangularDyckPath(RectangularPath):
 
 class SquarePath(RectangularPath):
 
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
@@ -565,7 +623,7 @@ class SquarePath(RectangularPath):
 
 class DyckPath(SquarePath, RectangularDyckPath):
 
-    @staticmethod
+    @ staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
@@ -681,7 +739,7 @@ class LatticePathsFactory(SetFactory):
 
         return [constraints[key] for key in keys]
 
-    @lazy_attribute
+    @ lazy_attribute
     def _default_policy(self):
         return SelfParentPolicy(self, self.Element)
 
@@ -765,6 +823,15 @@ class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
         latex_bounce_path = dict(default=False,
                                  description='The default value for displaying the bounce path when latexed.',
                                  checker=lambda x: isinstance(x, bool))
+        latex_show_stats = dict(default=True,
+                                description='The default value for displaying the statistics when latexed.',
+                                checker=lambda x: isinstance(x, bool))
+        latex_qstat = dict(default='qstat',
+                           description='The default statistics will depend on the class.',
+                           checker=lambda x: isinstance(x, str))
+        latex_tstat = dict(default='tstat',
+                           description='The default statistics will depend on the class.',
+                           checker=lambda x: isinstance(x, str))
 
 
 class RectangularDyckPaths_all(RectangularPaths_all):
@@ -982,6 +1049,15 @@ class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
         latex_bounce_path = dict(default=False,
                                  description='The default value for displaying the bounce path when latexed.',
                                  checker=lambda x: isinstance(x, bool))
+        latex_show_stats = dict(default=True,
+                                description='The default value for displaying the statistics when latexed.',
+                                checker=lambda x: isinstance(x, bool))
+        latex_qstat = dict(default='qstat',
+                           description='The default statistics will depend on the class.',
+                           checker=lambda x: isinstance(x, str))
+        latex_tstat = dict(default='tstat',
+                           description='The default statistics will depend on the class.',
+                           checker=lambda x: isinstance(x, str))
 
 
 class RectangularDyckPaths_size(RectangularPaths_size_shift):

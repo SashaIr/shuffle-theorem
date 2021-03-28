@@ -85,6 +85,7 @@ def draw(items, filename='paths', folder='LaTeX', columns=4, latex_options=None,
 
         column += 1
         latex += s._latex_()
+
         if column % columns == 0:  # Breaks line after 'cols' columns.
             latex += '\\newline\n'
     latex += '\\end{document}'

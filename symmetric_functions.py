@@ -7,27 +7,31 @@ Tools for the shuffle theorem and variants.
 
 # Import packages.
 from sage.arith.misc import gcd, xgcd
+from sage.categories.algebra_functor import GroupAlgebraFunctor
 from sage.combinat.partition import Partitions
 from sage.combinat.composition import Compositions
+from sage.combinat.permutation import Permutations
 from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
 from sage.combinat.sf.macdonald import cmunu
+from sage.groups.braid import BraidGroup
 from sage.misc.all import cached_function, prod
 from sage.rings.all import PolynomialRing, QQ
 
 
 # Define q, t, u.
-QQ['q', 't', 'u'].fraction_field().inject_variables(verbose=False)
-q = QQ['q', 't', 'u'].fraction_field().gens()[0]
-t = QQ['q', 't', 'u'].fraction_field().gens()[1]
-u = QQ['q', 't', 'u'].fraction_field().gens()[2]
+QQqt = QQ['q', 't', 'u'].fraction_field()
+QQqt.inject_variables(verbose=False)
+q = QQqt.gens()[0]
+t = QQqt.gens()[1]
+u = QQqt.gens()[2]
 
 # Define the Symmetric Functions algebra over Q.
 Sym = SymmetricFunctions(QQ)
 Sym.inject_shorthands(verbose=False)
 
 # Define the Symmetric Functions algebra over Q(q,t).
-Symqt = SymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
+Symqt = SymmetricFunctions(QQqt)
 Symqt.inject_shorthands(verbose=False)
 H = Symqt.macdonald().Ht()
 
@@ -36,7 +40,7 @@ QSym = QuasiSymmetricFunctions(QQ)
 QSym.inject_shorthands(verbose=False)
 
 # Define the QuasiSymmetric Functions algebra over Q(q,t).
-QSymqt = QuasiSymmetricFunctions(QQ['q', 't', 'u'].fraction_field())
+QSymqt = QuasiSymmetricFunctions(QQqt)
 QSymqt.inject_shorthands(verbose=False)
 
 
@@ -115,6 +119,11 @@ def qteval(f, q=q, t=t):
 def omega(f):
     # The involution omega (e <-> h).
     return f.omega()
+
+
+def omega_bar(f):
+    # The involution omega bar (e <-> h, q <-> 1/q, t <-> 1/t).
+    return qteval(f.omega(), q=1/q, t=1/t)
 
 
 def scalar(f, g):
@@ -454,3 +463,20 @@ def dminus(f, k):
             f2 += num[i]/den * VV(k-1).monomial()(mu) * VV(k-1).elementary()[i]*(-1)**i\
                 * (1 if i > 0 else 1-uu(k-1)*qq(k-1)**(1-k))
     return f2
+
+
+# Braid stuff
+
+@cached_function
+def BB(n):
+    return BraidGroup(('T%d' % (i+1,) for i in range(n-1)))
+
+
+@cached_function
+def Ti(k, n, m):
+    return BB(m+n).algebra(QQqt).gens()[k-1]
+
+
+@cached_function
+def idem(n, m):
+    return sum(q ^ sigma.number_of_inversions()*BB(m+n).algebra(QQqt).one()*BB(m+n)(sigma.reduced_word()) for sigma in Permutations(n))
