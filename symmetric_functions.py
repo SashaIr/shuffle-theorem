@@ -6,6 +6,8 @@ Tools for the shuffle theorem and variants.
 # TODO: Write documentation!
 
 # Import packages.
+from more_itertools.recipes import partition
+from math import exp
 from sage.arith.misc import gcd, xgcd
 from sage.categories.algebra_functor import GroupAlgebraFunctor
 from sage.combinat.partition import Partitions
@@ -13,6 +15,7 @@ from sage.combinat.composition import Compositions
 from sage.combinat.permutation import Permutations
 from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
+from sage.graphs.digraph import DiGraph
 from sage.combinat.sf.macdonald import cmunu
 from sage.groups.braid import BraidGroup
 from sage.misc.all import cached_function, prod
@@ -107,13 +110,13 @@ def characteristic_function(path):
     return Symqt.schur()(f)
 
 
-def qteval(f, q=q, t=t):
+def qteval(f, q=q, t=t, u=u):
     if f == 0:
         return 0
     elif QSymqt.Fundamental()(f).is_symmetric():
-        return sum(cf.subs(q=q, t=t)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
+        return sum(cf.subs(q=q, t=t, u=u)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
     else:
-        return sum(cf.subs(q=q, t=t)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
+        return sum(cf.subs(q=q, t=t, u=u)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
 
 
 def omega(f):
@@ -383,12 +386,12 @@ def XX0(k):
     return VV(k).monomial()([])
 
 
-def delta0(f, k, u, v):
-    return ((qq(k)-1)*v*f + (v-q*u)*f.subs({u: v, v: u}))/(v-u)
+def delta0(f, k, x, y):
+    return ((qq(k)-1)*y*f + (y-q*x)*f.subs({x: y, y: x}))/(q*(y-x))
 
 
-def deltastar0(f, k, u, v):
-    return ((qq(k)-1)*u*f + (v-q*u)*f.subs({u: v, v: u}))/(v-u)
+def deltastar0(f, k, x, y):
+    return ((qq(k)-1)*x*f + (y-q*x)*f.subs({x: y, y: x}))/(y-x)
 
 
 def act_on_coefficients(operator, f, k):
@@ -460,23 +463,266 @@ def dminus(f, k):
         T = RT.gens()[0]
         num = RT(cf.numerator()(list(RR(k-1).gens())+[T]))
         for i in range(num.degree()+1):
-            f2 += num[i]/den * VV(k-1).monomial()(mu) * VV(k-1).elementary()[i]*(-1)**i\
+            f2 += num[i]/den * VV(k-1).monomial()(mu) * VV(k-1).elementary()[i]*(-1)**i \
                 * (1 if i > 0 else 1-uu(k-1)*qq(k-1)**(1-k))
     return f2
 
 
-# Braid stuff
+# Quiver stuff
 
 @cached_function
-def BB(n):
-    return BraidGroup(('T%d' % (i+1,) for i in range(n-1)))
+def QV(k):
+    graph = DiGraph(k, loops=True, multiedges=True)
+
+    for i in range(k):
+        graph.add_edges([(i, i, 'y' + str(j) + 'd' + str(i)) for j in range(i+1)])
+
+    for i in range(k-1):
+        graph.add_edges([(i, i+1, 'dplus' + str(i)), (i, i+1, 'dplusstar' + str(i)), (i+1, i, 'dminus' + str(i+1))])
+
+    return graph
 
 
 @cached_function
-def Ti(k, n, m):
-    return BB(m+n).algebra(QQqt).gens()[k-1]
+def QVA(k):
+    return QV(k).path_semigroup().algebra(QQqt)
 
 
-@cached_function
-def idem(n, m):
-    return sum(q ^ sigma.number_of_inversions()*BB(m+n).algebra(QQqt).one()*BB(m+n)(sigma.reduced_word()) for sigma in Permutations(n))
+# # Braid stuff
+
+# @cached_function
+# def BB(n):
+#     return BraidGroup(('T%d' % (i+1,) for i in range(n-1)))
+
+
+# @cached_function
+# def Ti(k, n, m):
+#     return BB(m+n).algebra(QQqt).gens()[k-1]
+
+
+# @cached_function
+# def idem(n, m):
+#     return sum(q ^ sigma.number_of_inversions()*BB(m+n).algebra(QQqt).one()*BB(m+n)(sigma.reduced_word()) for sigma in Permutations(n))
+
+
+# Stuff for actions
+def act_as_y1(f, k):
+    for i in range(k-1):
+        f = TT(f, k, k-i-2)
+    return (1 / (q**(k-1)*(q-1)))*(dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
+
+
+def act_as_z1(f, k):
+    if f == 0:
+        return 0
+    for i in range(k-1):
+        f = TTstar(f, k, i)
+    return (q**k / (1-q))*(dplusstar(dminus(f, k), k-1) - dminus(dplusstar(f, k), k+1))
+
+
+def zz(k, i, f):
+
+    if f == 0:
+        return 0
+
+    for j in range(i):
+        f = TT(f, k, i-j-1)
+    for j in range(k-1):
+        f = TTstar(f, k, j)
+    f = (-q**k / (q-1))*(dplusstar(dminus(f, k), k-1) - dminus(dplusstar(f, k), k+1))
+    for j in range(i):
+        f = q**(-1) * TT(f, k, j)
+
+    return f
+
+
+def rho(m, n, operator, f, k):
+    # if m == 0 or n == 0:
+    #     print(m, n, operator, f, k)
+
+    if gcd(m, n) != 1:
+        raise ValueError('m, n must be coprime')
+
+    if operator == 'd-':
+        return dminus(f, k)
+
+    elif operator == 'd+':
+
+        if m == 0 and n == 1:
+            f = dplus(f, k)
+            # print(f)
+            f += (q*t)**(-1) * u * (1 + u*yy(k+1, 0)) * yy(k+1, 0) * act_as_z1(f, k+1)
+            # f *= 1 + u*yy(k+1, 0) + u*yy(k+1, 0)*u*yy(k+1, 0)
+            return f
+
+        elif m == 1 and n == 0:
+            return -q**k * dplusstar(f, k)
+
+        else:
+            (d, n1, m1) = xgcd(m, n)
+
+            if m1 > 0:
+                n1 = -n1
+            else:
+                m1 = int(m/d)+m1
+                n1 = int(n/d)-n1
+
+            f = (-1/(q*t)) * rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'd+', f, k), k+1)
+
+            return f
+
+    elif operator[0] == 'y':
+        i = int(operator[1:])-1
+
+        if m == 0 and n == 1:
+            # f = yy(k, i) * f
+            for j in range(i):
+                f = TTstar(f, k, i-j-1)
+            for j in range(k-1):
+                f = TT(f, k, j)
+            f = (q**(-k+1) / (q-1)) * (dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
+            # print(f)
+            f += (q*t)**(-1) * u * (1 + u*yy(k, 0)) * yy(k, 0) * act_as_z1(f, k)
+            # f *= (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))
+            for j in range(i):
+                f = q * TTstar(f, k, j)
+            return f
+
+        elif m == 1 and n == 0:
+            for j in range(i):
+                f = TTstar(f, k, i-j-1)
+            for j in range(k-1):
+                f = TT(f, k, j)
+            f = (-1 / (q-1))*(dplusstar(dminus(f, k), k-1) - q*dminus(dplusstar(f, k), k+1))
+            for j in range(i):
+                f = q * TTstar(f, k, j)
+
+            return f
+
+        else:
+            (d, n1, m1) = xgcd(m, n)
+
+            if m1 > 0:
+                n1 = -n1
+            else:
+                m1 = int(m/d)+m1
+                n1 = int(n/d)-n1
+
+            for j in range(i):
+                f = TTstar(f, k, i-j-1)
+            f = (-1/(q*t)) * rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k)
+            for j in range(i):
+                f = q * TTstar(f, k, j)
+
+            return f
+
+    return 'If you are reading this, something went horribly wrong'
+
+
+def rhostar(m, n, operator, f, k):
+    # if m == 0 or n == 0:
+    #     print('*', m, n, operator, f, k)
+
+    if gcd(m, n) != 1:
+        raise ValueError('m, n must be coprime')
+
+    if operator == 'd-':
+        return dminus(f, k)
+
+    elif operator == 'd+':
+
+        if m == 1 and n == 0:
+            return dplusstar(f, k)
+
+        elif m == 0 and n == 1:
+            return -q**(-k) * dplus(f, k)
+
+        else:
+            (d, n1, m1) = xgcd(m, n)
+
+            if m1 > 0:
+                n1 = -n1
+            else:
+                m1 = int(m/d)+m1
+                n1 = int(n/d)-n1
+
+            f = -rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'd+', f, k), k+1)
+            # f = f + uu(k+1)*rho(m-m1, n-n1, 'y1', f, k+1) + uu(k+1) * \
+            #     rho(m-m1, n-n1, 'y1', uu(k+1)*rho(m-m1, n-n1, 'y1', f, k+1), k+1)
+
+            # f = -rhostar(m1, n1, 'd+', f, k)
+            # f = f + (1/(q*t)) * u * (rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k+1), k+1) + u *
+            #                          rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k+1), k+1), k+1))
+            # f = rho(m-m1, n-n1, 'y1', f, k+1)
+
+            return f
+
+    elif operator[0] == 'y':
+        i = int(operator[1:])-1
+
+        if m == 1 and n == 0:
+            for j in range(i):
+                f = TT(f, k, i-j-1)
+            for j in range(k-1):
+                f = TTstar(f, k, j)
+            # f = (1 - u*yy(k, 0))*f
+            f = (-q**k / (q-1))*(dplusstar(dminus(f, k), k-1) - dminus(dplusstar(f, k), k+1))
+            # f = (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))*f
+            for j in range(i):
+                f = q**(-1) * TT(f, k, j)
+
+            return f
+
+        elif m == 0 and n == 1:
+            for j in range(i):
+                f = TT(f, k, i-j-1)
+            for j in range(k-1):
+                f = TTstar(f, k, j)
+            f = (1 / (q-1))*(q*dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
+            for j in range(i):
+                f = q**(-1) * TT(f, k, j)
+
+            return f
+
+        else:
+            (d, n1, m1) = xgcd(m, n)
+
+            if m1 > 0:
+                n1 = -n1
+            else:
+                m1 = int(m/d)+m1
+                n1 = int(n/d)-n1
+
+            for j in range(i):
+                f = TT(f, k, i-j-1)
+
+            f = -rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'y1', f, k), k)
+            # f += uu(k)*rho(m-m1, n-n1, 'y1', f, k) + uu(k)*rho(m-m1, n-n1, 'y1', uu(k)*rho(m-m1, n-n1, 'y1', f, k), k)
+
+            # f = -rhostar(m1, n1, 'y1', f, k)
+            # f = f + (1/(q*t)) * u * (rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k) + u *
+            #                          rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k), k))
+            # f = rho(m-m1, n-n1, 'y1', f, k)
+
+            for j in range(i):
+                f = q**(-1) * TT(f, k, j)
+
+            return f
+
+    return 'If you are reading this, something went horribly wrong'
+
+
+def rhostar_mn_alpha(m, n, alpha):
+    f = XX0(0)
+
+    for i in range(len(alpha)):
+        f = rhostar(m, n, 'd+', f, i)
+
+    for (i, alpha_i) in enumerate(alpha):
+        for j in range(alpha_i-1):
+            f = rhostar(m, n, 'y' + str(i+1), f, len(alpha))
+
+    for i in range(len(alpha)):
+        f = rhostar(m, n, 'd-', f, len(alpha)-i)
+
+    return (-1)**(sum(alpha)*(m+1)) * q**(len(alpha) - sum(alpha)) * f
