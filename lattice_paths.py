@@ -435,6 +435,21 @@ class LatticePath(ClonableIntArray):
         return [self.labels[i] for i in sorted(list(range(self.height)),
                                                key=lambda i: (self.area_word()[i], self.labels[i]))]
 
+    def diagonals(self):
+        # Computes the list whose entries are the labels appearing in each diagonal, bottom to top.
+
+        if self.labels is None:
+            raise AttributeError('The path is not labelled.')
+        else:
+            step = int(self.height/gcd(self.width, self.height))
+            diagonals = [[]]*int((self.shift + max(self.area_word()))*step + 1)
+
+            for i in range(self.height):
+                diagonals[(self.area_word()[i] + self.shift)*step] = diagonals[(self.area_word()[i] +
+                                                                                self.shift)*step] + [self.labels[i]]
+
+            return [sorted(d) for d in diagonals]
+
     def reading_word(self, read=None):
         # Computes the reading word of a path
 
@@ -644,7 +659,7 @@ class DyckPath(SquarePath, RectangularDyckPath):
         for v in self.valleys[::-1]:
             column = adjusted_columns[v]
             for i in range(self.height):
-                if column <= adjusted_columns[i] <= column + self.aword[v]:
+                if column <= adjusted_columns[i] <= column + self.area_word()[v]:
                     adjusted_columns[i] -= 1
 
         for i in range(self.width):
