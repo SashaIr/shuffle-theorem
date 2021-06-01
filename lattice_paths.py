@@ -450,6 +450,26 @@ class LatticePath(ClonableIntArray):
 
             return [sorted(d) for d in diagonals]
 
+    def zeta(self):
+        # https://www.combinatorics.org/ojs/index.php/eljc/article/view/v24i1p64
+
+        # Sweeps the steps of the path according to the distance from the main diagonal of their ending point.
+        # In case of a tie, the leftmost step is sweeped first. The path is then reversed.
+
+        if self.labels is not None or self.rises != [] or self.valleys != []:
+            raise NotImplementedError('The zeta map can only be computed for plain paths')
+
+        def rank(x, y):
+            # Gives the rank of the cell with cartesian coordinates (x,y).
+            # https://arxiv.org/abs/1501.00631 p.19
+
+            return y*self.width - x*self.height + (x*gcd(self.width, self.height) // self.width)
+
+        path = [self[i] for i in sorted(range(len(self)),
+                                        key=lambda j: (rank(j+1-sum(self[:j+1]), sum(self[:j+1]))))]
+
+        return self.__class__(path[::-1])
+
     def reading_word(self, read=None):
         # Computes the reading word of a path
 
@@ -579,26 +599,6 @@ class RectangularDyckPath(RectangularPath):
     def check(self):
         if not (self.shift == 0):
             raise ValueError(f'The path\'s shift is not 0')
-
-    def zeta(self):
-        # https://www.combinatorics.org/ojs/index.php/eljc/article/view/v24i1p64
-
-        # Sweeps the steps of the path according to the distance from the main diagonal of their ending point.
-        # In case of a tie, the leftmost step is sweeped first. The path is then reversed.
-
-        if self.labels is not None or self.rises != [] or self.valleys != []:
-            raise NotImplementedError('The zeta map can only be computed for plain paths')
-
-        def rank(x, y):
-            # Gives the rank of the cell with cartesian coordinates (x,y).
-            # https://arxiv.org/abs/1501.00631 p.19
-
-            return y*self.width - x*self.height + (x*gcd(self.width, self.height) // self.width)
-
-        path = [self[i] for i in sorted(range(len(self)),
-                                        key=lambda j: (rank(j+1-sum(self[:j+1]), sum(self[:j+1]))))]
-
-        return self.__class__(path[::-1])
 
 
 class SquarePath(RectangularPath):
