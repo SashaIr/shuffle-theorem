@@ -463,12 +463,13 @@ class LatticePath(ClonableIntArray):
             # Gives the rank of the cell with cartesian coordinates (x,y).
             # https://arxiv.org/abs/1501.00631 p.19
 
-            return y*self.width - x*self.height + (x*gcd(self.width, self.height) // self.width)
+            # return y*self.width - x*self.height + (x*gcd(self.width, self.height) // self.width)
+            return (y*self.width - x*self.height, y)
 
         path = [self[i] for i in sorted(range(len(self)),
                                         key=lambda j: (rank(j+1-sum(self[:j+1]), sum(self[:j+1]))))]
 
-        return self.__class__(path[::-1])
+        return self.__class__(self._auto_parent, path[::-1])
 
     def reading_word(self, read=None):
         # Computes the reading word of a path
