@@ -354,18 +354,18 @@ class LatticePath(ClonableIntArray):
 
         main_diagonal = [0]
         position = 0
-        block_height = 1
+        # block_height = 1
 
         for i in range(self.height):
-            # position += 1 if (i in self.rises or i in self.valleys) else self.slope
-            # main_diagonal += [position]
-            if i+1 in self.rises:
-                block_height += 1
-            else:
-                main_diagonal += [position+Rational((block_height+self.slope-1)*(i+1)/block_height)
-                                  for i in range(block_height)]
-                position += block_height-1+self.slope
-                block_height = 1
+            position += 1 if (i in self.rises or i in self.valleys) else self.slope
+            main_diagonal += [position]
+            # if i+1 in self.rises:
+            #     block_height += 1
+            # else:
+            #     main_diagonal += [position+Rational((block_height+self.slope-1)*(i+1)/block_height)
+            #                       for i in range(block_height)]
+            #     position += block_height-1+self.slope
+            #     block_height = 1
 
         return main_diagonal
 
@@ -404,8 +404,23 @@ class LatticePath(ClonableIntArray):
         for i in range(self.height):
             temp_dinv += len([j for j in range(self.height) if (
                 (self.labels is None or self.labels[i] < self.labels[j]) and (
-                    (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i+1 in self.rises else self.slope), i))
+                    (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i in self.rises else self.slope), i))
             )])
+
+        max_dinv = 0
+        for i in range(self.height):
+            max_dinv += len([j for j in range(self.height) if (
+                (self.area_word()[i], i) < (self.area_word()[j], j) < (
+                    self.area_word()[i] + (1 if i in self.rises else self.slope), i)
+            )])
+
+        alt_ferrer_dinv = 0
+        ferrer = self.ferrer()
+
+        for c in ferrer.cells():
+            if (self.height*ferrer.arm_length(*c) <= self.width*(ferrer.leg_length(*c)+1)
+                    and self.width*ferrer.leg_length(*c) < self.height*(ferrer.arm_length(*c)+1)):
+                alt_ferrer_dinv += 1
 
         ferrer_dinv = 0
         ferrer = self.ferrer()
@@ -422,7 +437,20 @@ class LatticePath(ClonableIntArray):
         bonus_dinv = len([i for i in range(self.height) if self.area_word()[i] < 0
                           and (self.labels is None or self.labels[i] > 0)])
 
-        return temp_dinv + ferrer_dinv + bonus_dinv
+        alt_bonus_dinv = 0
+        area_coordinate = 0
+        for i in self.path:
+            if i == 1:
+                area_coordinate += self.slope
+            else:
+                area_coordinate -= 1
+                if area_coordinate < 0:
+                    alt_bonus_dinv += 1
+
+        # print(temp_dinv, max_dinv, alt_ferrer_dinv, alt_bonus_dinv)
+
+        return temp_dinv - max_dinv + alt_ferrer_dinv + alt_bonus_dinv
+        # return temp_dinv + ferrer_dinv + bonus_dinv
 
     def zero(self):
         return 0

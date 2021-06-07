@@ -71,8 +71,11 @@ def characteristic_function(path):
         assert 0 <= i <= path.width and 0 <= j <= path.height
 
         if j == 0:
-            return bool(i == 0)
-        elif path.columns()[j-1] <= i <= path.main_diagonal()[j]:
+            if i <= path.shift:
+                return True
+            else:
+                return False
+        elif path.columns()[j-1] <= i <= path.main_diagonal()[j] + path.shift:
             return True
         else:
             return False
@@ -84,29 +87,36 @@ def characteristic_function(path):
     level = 0
 
     for c in collisions:
-        if c == (0, 0):
+        # if c == (0, 0):
+        #     pass
+        if c == (path.width, path.height):
             pass
-        elif c == (path.width, path.height):
-            f = dminus(f, level)
-            level -= 1
+            # f = dminus(f, level)
+            # level -= 1
         elif c[1] < path.height and path.columns()[c[1]] < c[0]:
-            if c[1] not in path.rises:
-                f *= t
+            pass
+            # if c[1] not in path.rises:
+            #     f *= t
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 0:
             f = dplus(f, level)
             level += 1
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 1:
             f = dminus(f, level)
             level -= 1
+            # if c[0] > path.main_diagonal()[c[1]]:
+            #     f *= q
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 1:
             exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f = q**(-exp)*(dminus(dplus(f, level), level+1) - dplus(dminus(f, level), level-1))/(q-1)
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 0:
             exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f *= q**exp
+            # if c[0] > path.main_diagonal()[c[1]]:
+            #     f *= q
         else:
             raise ValueError('Something went wrong here.')
 
+    f *= t**path.area()
     return Symqt.schur()(f)
 
 
@@ -252,15 +262,15 @@ def Q_mn(m, n, mu=None, f=None):
     if mu == None:
         mu = [1]
     if f == None:
-        #! f = Symqt.schur()[0]
-        f = (-1)**n * Symqt.schur()[0]
+        f = Symqt.schur()[0]
+        # f = (-1)**n * Symqt.schur()[0]
 
     if len(mu) == 0:
         return f
     elif len(mu) == 1:
         if m == 0:
-            #! return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1 - q*t)/(q*t))
-            return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1 - q*t)/(q*t))
+            return f * Symqt.schur()[1]
+            # return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1-q*t)/(q*t))
         elif n == 0:
             # This is NOT the same as https://academic.oup.com/imrn/article/2016/14/4229/2451634 if m > 1.
             return f-(1-q)*(1-t)*Delta(Symqt.schur()[1], f)
@@ -285,9 +295,9 @@ def Q_mn(m, n, mu=None, f=None):
 def F_mn(m, n, f):
     # The Elliptic Hall Algebra machinery that takes a seed f and returns a (m,n)-family of symmetric functions.
 
-    #! return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
+    return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
 
-    return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.schur()[0]) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
+    # return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.schur()[0]) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
 
 
 def iota(mu):
