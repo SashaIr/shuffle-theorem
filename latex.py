@@ -51,7 +51,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     else:
         pdf = pdf_viewer
 
-    os.system(pdf + ' ' + folder + '/Temp/' + filename + '.pdf' + ' &')
+    os.system(pdf + ' ' + folder + '/Temp/' + filename + '.pdf')
 
     return None
 
