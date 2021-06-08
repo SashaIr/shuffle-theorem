@@ -307,11 +307,16 @@ class LatticePath(ClonableIntArray):
 
     def word(self):
 
+        
         def is_under(i, j):
+            assert 0 <= i <= self.width and 0 <= j <= self.height
 
             if j == 0:
-                return bool(i == 0)
-            elif self.columns()[j-1] <= i <= self.main_diagonal()[j]:
+                if i <= self.shift:
+                    return True
+                else:
+                    return False
+            elif self.columns()[j-1] <= i <= self.main_diagonal()[j] + self.shift:
                 return True
             else:
                 return False
@@ -323,10 +328,10 @@ class LatticePath(ClonableIntArray):
         word = []
 
         for c in collisions:
-            if c == (0, 0):
+            # if c == (0, 0):
+            #     pass
+            if c == (self.width, self.height):
                 pass
-            elif c == (self.width, self.height):
-                word += ['d-']
             elif c[1] < self.height and self.columns()[c[1]] < c[0]:
                 pass
             elif self.path[c[0]+c[1]-1] == 1 and self.path[c[0]+c[1]] == 0:
