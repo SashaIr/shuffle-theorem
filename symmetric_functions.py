@@ -103,16 +103,12 @@ def characteristic_function(path):
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 1:
             f = dminus(f, level)
             level -= 1
-            # if c[0] > path.main_diagonal()[c[1]]:
-            #     f *= q
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 1:
             exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f = q**(-exp)*(dminus(dplus(f, level), level+1) - dplus(dminus(f, level), level-1))/(q-1)
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 0:
             exp = len([h for h in range(c[1], path.height) if h < path.slope*(path.columns()[h]-c[0])+c[1] <= h+1])
             f *= q**exp
-            # if c[0] > path.main_diagonal()[c[1]]:
-            #     f *= q
         else:
             raise ValueError('Something went wrong here.')
 
