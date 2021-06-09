@@ -429,6 +429,8 @@ def dplus0(f, k):
 
 
 def dplus(f, k):
+    if f == 0:
+        return 0
     f = -dplus0(f, k)*yy(k+1, k)
     for i in range(k):
         f = TT(f, k+1, k-i-1)
@@ -467,6 +469,8 @@ def dminus0(f, k):
 
 
 def dminus(f, k):
+    if f == 0:
+        return 0
     f1 = f(XX(k)-(qq(k)-1)*yy(k, k-1)*XX0(k))
     f2 = 0
     for (mu, cf) in VV(k).monomial()(f1):
