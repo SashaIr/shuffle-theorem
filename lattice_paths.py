@@ -45,7 +45,7 @@ def _format_constraints(constraints, reverse=False):
 
     if reverse is False:
         args, kwargs = constraints
-        formatted_constraints = [defaults[key] for key in defaults.keys()]
+        formatted_constraints = [defaults[key] for key in defaults]
 
         for i, arg in enumerate(args):
             formatted_constraints[i] = arg
@@ -82,9 +82,7 @@ def _generate_lattice_paths(m, n, shift=None, rises=[], valleys=[], _level=0, _s
     if n == 0:
         if shift is None or _flag is True:
             yield [0]*m
-    elif m == 0:
-        pass
-    else:
+    elif m != 0:
         if shift is not None:
             if _level < - shift:
                 return None
@@ -199,11 +197,10 @@ def _paths_size_shift(policy, width, height, shift, **kwargs):
             return DyckPaths_size(policy, width, **kwargs)
         else:
             return SquarePaths_size_shift(policy, width, shift, **kwargs)
+    elif shift == 0:
+        return RectangularDyckPaths_size(policy, width, height, **kwargs)
     else:
-        if shift == 0:
-            return RectangularDyckPaths_size(policy, width, height, **kwargs)
-        else:
-            return RectangularPaths_size_shift(policy, width, height, shift, **kwargs)
+        return RectangularPaths_size_shift(policy, width, height, shift, **kwargs)
 
 
 @add_metaclass(DynamicInheritComparisonClasscallMetaclass)
@@ -272,7 +269,7 @@ class LatticePath(ClonableIntArray):
         if composition is None:
             composition = [0] + [1]*self.height
 
-        if not self.height == sum(composition):
+        if self.height != sum(composition):
             raise ValueError('The number of labels does not match the size of the path')
 
         # Find the composition given by the vertical steps of the path.
@@ -290,12 +287,29 @@ class LatticePath(ClonableIntArray):
 
         # Define the set of labels.
         labels = [x for y in [[i]*composition[i] for i in range(len(composition))] for x in y]
-        labellings = [labelling for labelling in _mu_labellings(blocks, labels) if not (
-            (self.length > 0 and self.area_word()[0] == 0 and labelling[0] == 0)
-            or (len([i for i in range(self.height) if self.area_word()[i] == -self.shift and labelling[i] > 0 and i not in self.valleys]) == 0)
-        )]
-
-        return labellings
+        return [
+            labelling
+            for labelling in _mu_labellings(blocks, labels)
+            if not (
+                (
+                    self.length > 0
+                    and self.area_word()[0] == 0
+                    and labelling[0] == 0
+                )
+                or (
+                    len(
+                        [
+                            i
+                            for i in range(self.height)
+                            if self.area_word()[i] == -self.shift
+                            and labelling[i] > 0
+                            and i not in self.valleys
+                        ]
+                    )
+                    == 0
+                )
+            )
+        ]
 
     def characteristic_function(self):
         # Returns the characteristic function of the path, computed in terms of d+ d- operators.
@@ -307,15 +321,11 @@ class LatticePath(ClonableIntArray):
 
     def word(self):
 
-        
         def is_under(i, j):
             assert 0 <= i <= self.width and 0 <= j <= self.height
 
             if j == 0:
-                if i <= self.shift:
-                    return True
-                else:
-                    return False
+                return i <= self.shift
             elif self.columns()[j-1] <= i <= self.main_diagonal()[j] + self.shift:
                 return True
             else:
@@ -396,9 +406,11 @@ class LatticePath(ClonableIntArray):
         return Partition(self.columns()[::-1])
 
     def area(self):
-        # Returns the area. Ignores rows with decorated rises.
-        area = sum(floor(self.area_word()[i] + self.shift) for i in range(self.height) if i not in self.rises)
-        return area
+        return sum(
+            floor(self.area_word()[i] + self.shift)
+            for i in range(self.height)
+            if i not in self.rises
+        )
 
     def dinv(self):
         # Returns the dinv. If the path is labelled, it takes the labelling into account.
@@ -406,12 +418,27 @@ class LatticePath(ClonableIntArray):
         # TODO: It does not work for any rectangular path with decorated rises.
         # TODO: It does not allow for decorated contractible valleys.
 
-        temp_dinv = 0
-        for i in range(self.height):
-            temp_dinv += len([j for j in range(self.height) if (
-                (self.labels is None or self.labels[i] < self.labels[j]) and (
-                    (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i in self.rises else self.slope), i))
-            )])
+        temp_dinv = sum(
+            len(
+                [
+                    j
+                    for j in range(self.height)
+                    if (
+                        (self.labels is None or self.labels[i] < self.labels[j])
+                        and (
+                            (self.area_word()[i], i)
+                            < (self.area_word()[j], j)
+                            < (
+                                self.area_word()[i]
+                                + (1 if i in self.rises else self.slope),
+                                i,
+                            )
+                        )
+                    )
+                ]
+            )
+            for i in range(self.height)
+        )
 
         # max_dinv = 0
         # for i in range(self.height):
@@ -464,6 +491,10 @@ class LatticePath(ClonableIntArray):
     def rank(self, i, j):
         return self.main_diagonal()[j]-i
 
+    def diagonal_composition(self):
+        zeros = [i for i in range(self.height) if self.area_word()[i] == - self.shift] + [self.height]
+        return [zeros[i+1] - zeros[i] for i in range(len(zeros)-1)]
+
     def diagonal_word(self):
         # Returns the word obtained by sorting the diagonals in decreasing order, bottom to top.
         return [self.labels[i] for i in sorted(list(range(self.height)),
@@ -474,15 +505,15 @@ class LatticePath(ClonableIntArray):
 
         if self.labels is None:
             raise AttributeError('The path is not labelled.')
-        else:
-            step = int(self.height/gcd(self.width, self.height))
-            diagonals = [[]]*int((self.shift + max(self.area_word()))*step + 1)
+            
+        step = int(self.height/gcd(self.width, self.height))
+        diagonals = [[]]*int((self.shift + max(self.area_word()))*step + 1)
 
-            for i in range(self.height):
-                diagonals[(self.area_word()[i] + self.shift)*step] = diagonals[(self.area_word()[i] +
-                                                                                self.shift)*step] + [self.labels[i]]
+        for i in range(self.height):
+            diagonals[(self.area_word()[i] + self.shift)*step] = diagonals[(self.area_word()[i] +
+                                                                            self.shift)*step] + [self.labels[i]]
 
-            return [sorted(d) for d in diagonals]
+        return [sorted(d) for d in diagonals]
 
     def zeta(self):
         # https://www.combinatorics.org/ojs/index.php/eljc/article/view/v24i1p64

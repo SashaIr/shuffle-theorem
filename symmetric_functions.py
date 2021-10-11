@@ -53,13 +53,12 @@ def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
     if x == False:
         return sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() for s in items)
 
+    f = sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() * QSymqt.Fundamental()(s.gessel(read))
+            for s in items)
+    if f.is_symmetric():
+        return Symqt.schur()(f.to_symmetric_function())
     else:
-        f = sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() * QSymqt.Fundamental()(s.gessel(read))
-                for s in items)
-        if f.is_symmetric():
-            return Symqt.schur()(f.to_symmetric_function())
-        else:
-            return f
+        return f
 
 
 def characteristic_function(path):
@@ -71,10 +70,7 @@ def characteristic_function(path):
         assert 0 <= i <= path.width and 0 <= j <= path.height
 
         if j == 0:
-            if i <= path.shift:
-                return True
-            else:
-                return False
+            return i <= path.shift
         elif path.columns()[j-1] <= i <= path.main_diagonal()[j] + path.shift:
             return True
         else:
@@ -170,9 +166,8 @@ def Delta(f, g):
     # Delta operator.
     if g == 0:
         return 0
-    else:
-        g = g*Symqt.schur()[0]
-        return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.schur()[0])*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
+    g = g*Symqt.schur()[0]
+    return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.schur()[0])*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
 def Deltaprime(f, g):
@@ -226,25 +221,27 @@ def C_alpha(alpha, f=Symqt.schur()[0]):
     # Zabrocki's operator C_\alpha.
     if len(alpha) == 0:
         return f
-    else:
-        sf = sum((-q)**(1-alpha[-1]) * q**(-r) * Symqt.homogeneous()[alpha[-1]+r] *
-                 f.skew_by(Symqt.homogeneous()[r](Symqt.schur()[1]*(1-q))) for r in range(f.degree()+1))
-        return C_alpha(alpha[:-1], sf)
+    sf = sum((-q)**(1-alpha[-1]) * q**(-r) * Symqt.homogeneous()[alpha[-1]+r] *
+             f.skew_by(Symqt.homogeneous()[r](Symqt.schur()[1]*(1-q))) for r in range(f.degree()+1))
+    return C_alpha(alpha[:-1], sf)
 
 
 def B_alpha(alpha, f=Symqt.schur()[0]):
     # Zabrocki's operator B_\alpha. It's reversed wrt C_\alpha, because reasons.
     if len(alpha) == 0:
         return f
-    else:
-        sf = sum((-1)**r * Symqt.elementary()[alpha[0]+r]
-                 * f.skew_by(Symqt.homogeneous()[r](Symqt.schur()[1]*(1-q))) for r in range(f.degree()+1))
-        return B_alpha(alpha[1:], sf)
+    sf = sum((-1)**r * Symqt.elementary()[alpha[0]+r]
+             * f.skew_by(Symqt.homogeneous()[r](Symqt.schur()[1]*(1-q))) for r in range(f.degree()+1))
+    return B_alpha(alpha[1:], sf)
 
 
 def E_nk(n, k):
     # The E_{n,k} symmetric functions.
-    return sum([C_alpha(alpha, Symqt.schur()[0]) for alpha in Compositions(n) if len(alpha) == k])
+    return sum(
+        C_alpha(alpha, Symqt.schur()[0])
+        for alpha in Compositions(n)
+        if len(alpha) == k
+    )
 
 
 # Stuff from Bergeron's file
@@ -255,9 +252,9 @@ def D_n(n, f):
 
 def Q_mn(m, n, mu=None, f=None):
 
-    if mu == None:
+    if mu is None:
         mu = [1]
-    if f == None:
+    if f is None:
         f = Symqt.schur()[0]
         # f = (-1)**n * Symqt.schur()[0]
 
@@ -343,19 +340,17 @@ def pi_mn(m, n=None):
 def E_mn(m, n, r):
     if (m, n) == (0, 0):
         return 0
-    else:
-        d = gcd(m, n)
-        return F_mn(m/d, n/d, E_nk(d, r) * Symqt.schur()[0])
+    d = gcd(m, n)
+    return F_mn(m/d, n/d, E_nk(d, r) * Symqt.schur()[0])
 
 
 def C_alpha_mn(m, n, alpha, f=Symqt.schur()[0]):
     if (m, n) == (0, 0):
         return 0
-    else:
-        d = gcd(m, n)
-        if not sum(alpha) == d:
-            raise ValueError('The composition does not have the right length.')
-        return F_mn(m/d, n/d, C_alpha(alpha, f))
+    d = gcd(m, n)
+    if sum(alpha) != d:
+        raise ValueError('The composition does not have the right length.')
+    return F_mn(m/d, n/d, C_alpha(alpha, f))
 
 
 # Stuff from Mellit's file
@@ -422,9 +417,11 @@ def TTstar(f, k, i):
 
 
 def dplus0(f, k):
-    f1 = 0
-    for p, cf in VV(k).monomial()(f):
-        f1 += cf(RR(k+1).gens()[:-1]) * VV(k+1).monomial()(p)
+    f1 = sum(
+        cf(RR(k + 1).gens()[:-1]) * VV(k + 1).monomial()(p)
+        for p, cf in VV(k).monomial()(f)
+    )
+
     return f1(XX(k+1)+(qq(k+1)-1)*yy(k+1, k)*XX0(k+1))
 
 
@@ -738,7 +735,7 @@ def rhostar_mn_alpha(m, n, alpha):
         f = rhostar(m, n, 'd+', f, i)
 
     for (i, alpha_i) in enumerate(alpha):
-        for j in range(alpha_i-1):
+        for _ in range(alpha_i-1):
             f = rhostar(m, n, 'y' + str(i+1), f, len(alpha))
 
     for i in range(len(alpha)):
