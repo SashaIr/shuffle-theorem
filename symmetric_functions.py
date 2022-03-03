@@ -6,7 +6,7 @@ Tools for the shuffle theorem and variants.
 # TODO: Write documentation!
 
 # Import packages.
-from more_itertools.recipes import partition
+from more_itertools import partition
 from math import exp
 from sage.arith.misc import gcd, xgcd
 from sage.categories.algebra_functor import GroupAlgebraFunctor
@@ -17,10 +17,8 @@ from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
 from sage.graphs.digraph import DiGraph
 from sage.combinat.sf.macdonald import cmunu
-from sage.groups.braid import BraidGroup
 from sage.misc.all import cached_function, prod
 from sage.rings.all import PolynomialRing, QQ
-
 
 # Define q, t, u.
 QQqt = QQ['q', 't', 'u'].fraction_field()
@@ -55,10 +53,7 @@ def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
 
     f = sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() * QSymqt.Fundamental()(s.gessel(read))
             for s in items)
-    if f.is_symmetric():
-        return Symqt.schur()(f.to_symmetric_function())
-    else:
-        return f
+    return Symqt.schur()(f.to_symmetric_function()) if f.is_symmetric() else f
 
 
 def characteristic_function(path):
@@ -156,10 +151,7 @@ def B_mu(mu):
 
 def nabla(f, power=1):
     # The nabla operator.
-    if f == 0:
-        return 0
-    else:
-        return f.nabla(power=power)
+    return 0 if f == 0 else f.nabla(power=power)
 
 
 def Delta(f, g):
