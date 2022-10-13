@@ -3,12 +3,13 @@ SageMath module.
 Tools for the shuffle theorem and variants.
 '''
 
+
 import os
 import subprocess
 import sys
 
 
-if sys.platform == 'win32' or sys.platform == 'win64':
+if sys.platform in ['win32', 'win64']:
     # Use PowerShell instead of CMD on Windows.
     os.system = lambda msg: subprocess.call(['powershell.exe', msg], stdout=sys.stdout)
 
@@ -21,28 +22,28 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     '''
 
     # Create the folder.
-    os.system('mkdir -p ' + folder)
+    os.system(f'mkdir -p {folder}')
 
     # Create the LaTeX file.
-    with open(folder + '/' + filename + '.tex', 'w') as f:
+    with open(f'{folder}/{filename}.tex', 'w') as f:
         f.write(latex)
 
     # Compiles the LaTeX file, then deletes the 'Temp' folder, recreates it with all the new files.
     # If pdf_viewer is set to None, it uses the deafult one.
-    os.system('pdflatex -quiet ' + folder + '/' + filename + '.tex')
+    os.system(f'pdflatex -quiet {folder}/{filename}.tex')
     os.system('rm ' + '-r ' + folder + '/Temp')
-    os.system('mkdir ' + folder + '/Temp')
-    os.rename(folder + '/' + filename + '.tex', folder + '/Temp/' + filename + '.tex')
-    os.rename(filename + '.pdf', folder + '/Temp/' + filename + '.pdf')
-    os.rename(filename + '.log', folder + '/Temp/' + filename + '.log')
-    os.rename(filename + '.aux', folder + '/Temp/' + filename + '.aux')
+    os.system(f'mkdir {folder}/Temp')
+    os.rename(f'{folder}/{filename}.tex', f'{folder}/Temp/{filename}.tex')
+    os.rename(f'{filename}.pdf', f'{folder}/Temp/{filename}.pdf')
+    os.rename(f'{filename}.log', f'{folder}/Temp/{filename}.log')
+    os.rename(f'{filename}.aux', f'{folder}/Temp/{filename}.aux')
 
-    if pdf_viewer == None:
-        if sys.platform == 'win32' or sys.platform == 'win64':  # Windows environment
+    if pdf_viewer is None:
+        if sys.platform in ['win32', 'win64']:  # Windows environment
             pdf = 'start'
         elif sys.platform == 'darwin':  # MacOS environment
             pdf = 'open'
-        elif sys.platform == 'linux' or sys.platform == 'linux2':  # Linux environment
+        elif sys.platform in ['linux', 'linux2']:  # Linux environment
             pdf = 'xdg-open'
         elif sys.platform == 'cygwin':  # Sage environment
             pdf = 'cygstart'
@@ -51,7 +52,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     else:
         pdf = pdf_viewer
 
-    os.system(pdf + ' ' + folder + '/Temp/' + filename + '.pdf')
+    os.system(f'{pdf} {folder}/Temp/{filename}.pdf')
 
     return None
 
@@ -77,13 +78,10 @@ def draw(items, filename='paths', folder='LaTeX', columns=4, latex_options=None,
     latex += '\\begin{document}\n\n'
     latex += '\\vspace*{1cm} \\begin{center} \\textsc{Number of objects: %d} \\end{center} \n\n' % (len(items))
 
-    column = 0  # col is the column in which the current object is placed.
-
-    for s in items:
+    for column, s in enumerate(items, start=1):
         if latex_options is not None:
             s.set_latex_options(latex_options)
 
-        column += 1
         latex += s._latex_()
 
         if column % columns == 0:  # Breaks line after 'cols' columns.

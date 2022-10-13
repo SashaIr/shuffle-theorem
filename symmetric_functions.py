@@ -10,6 +10,7 @@ from more_itertools import partition
 from math import exp
 from sage.arith.misc import gcd, xgcd
 from sage.categories.algebra_functor import GroupAlgebraFunctor
+from sage.categories.tensor import tensor
 from sage.combinat.partition import Partitions
 from sage.combinat.composition import Compositions
 from sage.combinat.permutation import Permutations
@@ -21,11 +22,12 @@ from sage.misc.all import cached_function, prod
 from sage.rings.all import PolynomialRing, QQ
 
 # Define q, t, u.
-QQqt = QQ['q', 't', 'u'].fraction_field()
+QQqt = QQ['q', 't', 'u', 'v'].fraction_field()
 QQqt.inject_variables(verbose=False)
 q = QQqt.gens()[0]
 t = QQqt.gens()[1]
 u = QQqt.gens()[2]
+v = QQqt.gens()[3]
 
 # Define the Symmetric Functions algebra over Q.
 Sym = SymmetricFunctions(QQ)
@@ -56,10 +58,13 @@ def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
     return Symqt.schur()(f.to_symmetric_function()) if f.is_symmetric() else f
 
 
+def qtxy(items, qstat='qstat', tstat='tstat'):
+    return sum(q ** getattr(s, qstat)() * t ** getattr(s, tstat)() * tensor([QSymqt.Fundamental()(s.gessel('diagonal')), QSymqt.Fundamental()(s.gessel('vertical'))]) for s in items)
+
+
 def characteristic_function(path):
 
     # if not (path.labels == None and path.rises == [] and path.valleys == []):
-    #     raise ValueError('I can only compute the characteristic funcion of a plain path.')
 
     def is_under(i, j):
         assert 0 <= i <= path.width and 0 <= j <= path.height
@@ -72,7 +77,8 @@ def characteristic_function(path):
             return False
 
     collisions = [(i, j) for i in range(path.width+1) for j in range(path.height+1) if is_under(i, j)]
-    collisions = sorted(collisions, key=lambda c: (path.rank(*c), c[1]), reverse=True)
+    #collisions = sorted(collisions, key=lambda c: (path.rank(*c), c[1]), reverse=True)
+    collisions = sorted(collisions, key=lambda c: (c[1]*path.width - c[0]*path.height, c[1]), reverse=True)
 
     f = XX0(0)
     level = 0
@@ -107,13 +113,27 @@ def characteristic_function(path):
     return Symqt.schur()(f)
 
 
-def qteval(f, q=q, t=t, u=u):
+def unicellular(path):
+    f = XX0(0)
+    level = 0
+    for i in path.path:
+        if i == 1:
+            f = dplus(f, level)
+            level += 1
+        else:
+            f = dminus(f, level)
+            level -= 1
+
+    return f
+
+
+def qteval(f, q=q, t=t, u=u, v=v):
     if f == 0:
         return 0
     elif QSymqt.Fundamental()(f).is_symmetric():
-        return sum(cf.subs(q=q, t=t, u=u)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
+        return sum(cf.subs(q=q, t=t, u=u, v=v)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
     else:
-        return sum(cf.subs(q=q, t=t, u=u)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
+        return sum(cf.subs(q=q, t=t, u=u, v=v)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
 
 
 def omega(f):
@@ -203,10 +223,9 @@ def Theta(f, g):
 
     if f.degree() == 0:
         return Symqt.schur()(f * g)
-    else:
-        sf = sum(cc * theta_ek(gamma[0], Theta(Symqt.elementary()[gamma[1:]], g))
-                 for (gamma, cc) in Symqt.elementary()(f))
-        return Symqt.schur()(sf)
+    sf = sum(cc * theta_ek(gamma[0], Theta(Symqt.elementary()[gamma[1:]], g))
+             for (gamma, cc) in Symqt.elementary()(f))
+    return Symqt.schur()(sf)
 
 
 def C_alpha(alpha, f=Symqt.schur()[0]):
@@ -236,7 +255,12 @@ def E_nk(n, k):
     )
 
 
+def Xi(f):
+    # This is morally Delta(e[1], Theta(f, 1))
+    return (1-q)*(1-t)*Delta(Symqt.schur()[1], Pi(f(Symqt.schur()[1]/(1-q)/(1-t))))
+
 # Stuff from Bergeron's file
+
 
 def D_n(n, f):
     return Q_mn(1, n, f=f)
@@ -247,18 +271,21 @@ def Q_mn(m, n, mu=None, f=None):
     if mu is None:
         mu = [1]
     if f is None:
-        f = Symqt.schur()[0]
-        # f = (-1)**n * Symqt.schur()[0]
+        #f = Symqt.schur()[0]
+        f = (-1)**n * Symqt.schur()[0]
 
     if len(mu) == 0:
         return f
     elif len(mu) == 1:
         if m == 0:
-            return f * Symqt.schur()[1]
-            # return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1-q*t)/(q*t))
+            # return f * Symqt.schur()[1]
+            return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1-q*t)/(q*t))
         elif n == 0:
             # This is NOT the same as https://academic.oup.com/imrn/article/2016/14/4229/2451634 if m > 1.
-            return f-(1-q)*(1-t)*Delta(Symqt.schur()[1], f)
+            if m == 1:
+                return f-(1-q)*(1-t)*Delta(Symqt.schur()[1], f)
+            else:
+                raise NotImplementedError('This should give some D operator')
         else:
             m *= mu[0]
             n *= mu[0]
@@ -280,9 +307,9 @@ def Q_mn(m, n, mu=None, f=None):
 def F_mn(m, n, f):
     # The Elliptic Hall Algebra machinery that takes a seed f and returns a (m,n)-family of symmetric functions.
 
-    return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
+    # return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
 
-    # return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.schur()[0]) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
+    return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.schur()[0]) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
 
 
 def iota(mu):
@@ -349,7 +376,7 @@ def C_alpha_mn(m, n, alpha, f=Symqt.schur()[0]):
 
 @cached_function
 def RR(k):
-    ring = PolynomialRing(QQ, names=['q', 't', 'u'] + ['y%d' % (i,) for i in range(k)])
+    ring = PolynomialRing(QQ, names=['q', 't', 'u', 'v'] + ['y%d' % (i,) for i in range(k)])
     return ring.fraction_field()
 
 
@@ -374,8 +401,13 @@ def uu(k):
 
 
 @cached_function
+def vv(k):
+    return RR(k).gen(3)
+
+
+@cached_function
 def yy(k, i):
-    return RR(k).gen(i+3)
+    return RR(k).gen(i+4)
 
 
 @cached_function
@@ -447,8 +479,8 @@ def dminus0(f, k):
     for (mu, cf) in VV(k).monomial()(f1):
         cf = RR(k)(cf)
         den = cf.denominator()
-        assert all(v in (qq(k), tt(k)) for v in den.variables())
-        den = den([qq(k-1), tt(k-1), uu(k-1)] + [0]*k)
+        assert all(w in (qq(k), tt(k)) for w in den.variables())
+        den = den([qq(k-1), tt(k-1), uu(k-1), vv(k-1)] + [0]*k)
         RT = RR(k-1)['T']
         T = RT.gens()[0]
         num = RT(cf.numerator()(list(RR(k-1).gens())+[T]))
@@ -465,8 +497,8 @@ def dminus(f, k):
     for (mu, cf) in VV(k).monomial()(f1):
         cf = RR(k)(cf)
         den = cf.denominator()
-        assert all(v in (qq(k), tt(k)) for v in den.variables())
-        den = den([qq(k-1), tt(k-1), uu(k-1)] + [0]*k)
+        assert all(w in (qq(k), tt(k)) for w in den.variables())
+        den = den([qq(k-1), tt(k-1), uu(k-1), vv(k-1)] + [0]*k)
         RT = RR(k-1)['T']
         T = RT.gens()[0]
         num = RT(cf.numerator()(list(RR(k-1).gens())+[T]))
@@ -483,10 +515,11 @@ def QV(k):
     graph = DiGraph(k, loops=True, multiedges=True)
 
     for i in range(k):
-        graph.add_edges([(i, i, 'y' + str(j) + 'd' + str(i)) for j in range(i+1)])
+        graph.add_edges([(i, i, f'y{str(j)}d{str(i)}') for j in range(i+1)])
 
     for i in range(k-1):
-        graph.add_edges([(i, i+1, 'dplus' + str(i)), (i, i+1, 'dplusstar' + str(i)), (i+1, i, 'dminus' + str(i+1))])
+        graph.add_edges([(i, i + 1, f'dplus{str(i)}'), (i, i + 1,
+                        f'dplusstar{str(i)}'), (i + 1, i, f'dminus{str(i + 1)}')])
 
     return graph
 
@@ -591,22 +624,12 @@ def rho(m, n, operator, f, k):
             f = (q**(-k+1) / (q-1)) * (dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
             # print(f)
             f += (q*t)**(-1) * u * (1 + u*yy(k, 0)) * yy(k, 0) * act_as_z1(f, k)
-            # f *= (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))
-            for j in range(i):
-                f = q * TTstar(f, k, j)
-            return f
-
         elif m == 1 and n == 0:
             for j in range(i):
                 f = TTstar(f, k, i-j-1)
             for j in range(k-1):
                 f = TT(f, k, j)
             f = (-1 / (q-1))*(dplusstar(dminus(f, k), k-1) - q*dminus(dplusstar(f, k), k+1))
-            for j in range(i):
-                f = q * TTstar(f, k, j)
-
-            return f
-
         else:
             (d, n1, m1) = xgcd(m, n)
 
@@ -619,10 +642,10 @@ def rho(m, n, operator, f, k):
             for j in range(i):
                 f = TTstar(f, k, i-j-1)
             f = (-1/(q*t)) * rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k)
-            for j in range(i):
-                f = q * TTstar(f, k, j)
-
-            return f
+        # f *= (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))
+        for j in range(i):
+            f = q * TTstar(f, k, j)
+        return f
 
     return 'If you are reading this, something went horribly wrong'
 
@@ -675,23 +698,12 @@ def rhostar(m, n, operator, f, k):
                 f = TTstar(f, k, j)
             # f = (1 - u*yy(k, 0))*f
             f = (-q**k / (q-1))*(dplusstar(dminus(f, k), k-1) - dminus(dplusstar(f, k), k+1))
-            # f = (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))*f
-            for j in range(i):
-                f = q**(-1) * TT(f, k, j)
-
-            return f
-
         elif m == 0 and n == 1:
             for j in range(i):
                 f = TT(f, k, i-j-1)
             for j in range(k-1):
                 f = TTstar(f, k, j)
             f = (1 / (q-1))*(q*dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
-            for j in range(i):
-                f = q**(-1) * TT(f, k, j)
-
-            return f
-
         else:
             (d, n1, m1) = xgcd(m, n)
 
@@ -705,17 +717,11 @@ def rhostar(m, n, operator, f, k):
                 f = TT(f, k, i-j-1)
 
             f = -rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'y1', f, k), k)
-            # f += uu(k)*rho(m-m1, n-n1, 'y1', f, k) + uu(k)*rho(m-m1, n-n1, 'y1', uu(k)*rho(m-m1, n-n1, 'y1', f, k), k)
+        # f = (1 + u*yy(k, 0) + u*yy(k, 0)*u*yy(k, 0))*f
+        for j in range(i):
+            f = q**(-1) * TT(f, k, j)
 
-            # f = -rhostar(m1, n1, 'y1', f, k)
-            # f = f + (1/(q*t)) * u * (rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k) + u *
-            #                          rho(m-m1, n-n1, 'y1', rhostar(m1, n1, 'y1', rho(m-m1, n-n1, 'y1', f, k), k), k))
-            # f = rho(m-m1, n-n1, 'y1', f, k)
-
-            for j in range(i):
-                f = q**(-1) * TT(f, k, j)
-
-            return f
+        return f
 
     return 'If you are reading this, something went horribly wrong'
 
@@ -728,7 +734,7 @@ def rhostar_mn_alpha(m, n, alpha):
 
     for (i, alpha_i) in enumerate(alpha):
         for _ in range(alpha_i-1):
-            f = rhostar(m, n, 'y' + str(i+1), f, len(alpha))
+            f = rhostar(m, n, f'y{str(i + 1)}', f, len(alpha))
 
     for i in range(len(alpha)):
         f = rhostar(m, n, 'd-', f, len(alpha)-i)

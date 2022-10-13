@@ -166,11 +166,12 @@ def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, d
     for r in combinations(range(1, height), decorated_rises):
         for v in combinations([i for i in range(height) if i not in r], decorated_valleys):
             for path in _generate_lattice_paths(width, height, shift=shift, rises=r, valleys=v):
-                if labelled is False:
-                    yield path, None, r, v
-                else:
-                    for l in LatticePath(path, rises=r, valleys=v).labellings(labels):
-                        yield path, l, r, v
+                if 0 not in v or path[0] == 0:
+                    if labelled is False:
+                        yield path, None, r, v
+                    else:
+                        for l in LatticePath(path, rises=r, valleys=v).labellings(labels):
+                            yield path, l, r, v
 
 
 def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
@@ -214,8 +215,14 @@ class LatticePath(ClonableIntArray):
     def _auto_parent(cls):
         return RectangularPaths_all(SelfParentPolicy(LatticePaths, cls))
 
-    def __init__(self, parent, path, labels=None, rises=[], valleys=[], latex_options={}):
+    def __init__(self, parent, path, labels=None, rises=None, valleys=None, latex_options=None):
 
+        if latex_options is None:
+            latex_options = {}
+        if rises is None:
+            rises = []
+        if valleys is None:
+            valleys = []
         self.path = path
         self.labels = labels
         self.rises = rises
@@ -310,6 +317,37 @@ class LatticePath(ClonableIntArray):
                 )
             )
         ]
+
+    def multilabellings(self, n=1, existing_labels=None):
+
+        # all_labellings = []
+
+        if existing_labels is None:
+            existing_labels = [[]]*self.height
+
+        if n == 0:
+            yield existing_labels
+
+        else:
+            extra_spacing = [len([j for j in range(len(existing_labels[0])) if existing_labels[i]
+                                 [j] >= existing_labels[i+1][j]]) for i in range(self.height-1)]
+
+            spacing = [self.area_word()[i] + int(self.width/self.height) - self.area_word()
+                       [i+1] - extra_spacing[i] for i in range(self.height-1)]
+            assert(spacing[i] >= 0 for i in range(self.height-1))
+
+            composition = []
+            block_size = 1
+            for i in range(self.height-1):
+                if spacing[i] == 0:
+                    block_size += 1
+                else:
+                    composition += [block_size]
+                    block_size = 1
+            composition += [block_size]
+
+            for labelling in _mu_labellings(composition, list(range(1, self.height+1))):
+                yield from self.multilabellings(n=n - 1, existing_labels=[existing_labels[i] + [labelling[i]] for i in range(self.height)])
 
     def characteristic_function(self):
         # Returns the characteristic function of the path, computed in terms of d+ d- operators.
@@ -412,6 +450,31 @@ class LatticePath(ClonableIntArray):
             if i not in self.rises
         )
 
+    # def dinv(self):
+
+    #     dinv = 0  # Initializes dinv to 0.
+
+    #     # Goes through the letters of the area word.
+    #     for i in range(self.height):
+    #         if self.area_word()[i] < 0:  # Bonus dinv
+    #             if self.labels is None or self.labels[i] > 0:
+    #                 dinv += 1
+    #         if i not in self.valleys:  # Skip decorated valleys
+    #             for j in range(i+1, self.height):  # Looks at the right.
+    #                 if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
+    #                     # Checks labels
+    #                     if self.labels is None or self.labels[j] > self.labels[i]:
+    #                         dinv += 1
+    #                 if not (i in self.rises and i-1 in self.valleys):
+    #                     if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
+    #                         # Checks labels
+    #                         if self.labels is None or self.labels[j] < self.labels[i]:
+    #                             dinv += 1
+    #         elif i in self.valleys:  # Subtract 1 for each decorated valley
+    #             dinv += -1
+
+    #     return dinv
+
     def dinv(self):
         # Returns the dinv. If the path is labelled, it takes the labelling into account.
         # Currently works for any rectangular path with no decorated rises, and any square path.
@@ -505,7 +568,7 @@ class LatticePath(ClonableIntArray):
 
         if self.labels is None:
             raise AttributeError('The path is not labelled.')
-            
+
         step = int(self.height/gcd(self.width, self.height))
         diagonals = [[]]*int((self.shift + max(self.area_word()))*step + 1)
 
@@ -590,6 +653,7 @@ class LatticePath(ClonableIntArray):
         colour = latex_options['colour']
         line_width = latex_options['line width']
         scale = latex_options['tikz_scale']
+        extra_stuff = latex_options['extra stuff']
 
         tikz = '\n'
         tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
@@ -611,8 +675,6 @@ class LatticePath(ClonableIntArray):
 
         tikz += f'    \\draw[{colour}, line width={line_width}pt] (0,0)'
         labels = ''
-        rises = ''
-        valleys = ''
 
         x = y = 0
         for i in self.path:
@@ -623,27 +685,24 @@ class LatticePath(ClonableIntArray):
             tikz += f' -- ({x},{y})'
         tikz += ';\n\n'
 
-        for i in self.rises:
-            rises += '    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
-                [sum(self.path[:j]) for j in range(self.length)].index(i)-i-0.5, i+0.5)
+        rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+            [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
 
-        for i in self.valleys:
-            valleys += '    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
-                [sum(self.path[:j]) for j in range(self.length)].index(i+1)-(i+1)-0.5, (i+1)-0.5)
+        valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
+            [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
+
+        stats = '\n'
 
         if latex_options['show_stats'] == True:
-            stats = '\n'
-            stats += '      \\node[below left] at (%d,0) {' % (self.width)
 
-            colour = 0
+            stats += '      \\node[below left] at (%d,0) {' % (self.width)
             colours = ['blue', 'red', 'green']
 
-            for stat in [repr(latex_options['qstat']), repr(latex_options['tstat'])]:
+            for colour, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
                 stats += ' \\color{%s}{$%d$}' % (colours[colour % 3], getattr(self, stat)())
-                colour += 1
             stats += '};\n'
 
-        return (tikz + labels + rises + valleys + stats + '\\end{tikzpicture}')
+        return (tikz + labels + rises + valleys + stats + extra_stuff + '\\end{tikzpicture}')
 
 
 class RectangularPath(LatticePath):
@@ -748,6 +807,31 @@ class DyckPath(SquarePath, RectangularDyckPath):
                 stack -= {u}
 
         return parking_word
+
+    def dinv(self):
+
+        dinv = 0  # Initializes dinv to 0.
+
+        # Goes through the letters of the area word.
+        for i in range(self.height):
+            if self.area_word()[i] < 0:  # Bonus dinv
+                if self.labels is None or self.labels[i] > 0:
+                    dinv += 1
+            if i not in self.valleys and not (i in self.rises and i-1 in self.valleys):  # Skip decorated valleys
+                for j in range(i+1, self.height):  # Looks at the right.
+                    if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
+                        # Checks labels
+                        if self.labels is None or self.labels[j] < self.labels[i]:
+                            dinv += 1
+                for j in range(i+1, self.height):
+                    if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
+                        # Checks labels
+                        if self.labels is None or self.labels[j] > self.labels[i]:
+                            dinv += 1
+            else:  # Subtract 1 for each decorated valley
+                dinv += -1
+
+        return dinv
 
     def pmaj(self):
         return sum(i for i in range(1, self.height) if self.parking_word()[-i] > self.parking_word()[-i-1])
