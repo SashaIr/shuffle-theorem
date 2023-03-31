@@ -102,14 +102,16 @@ def characteristic_function(path):
             level -= 1
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 1:
             exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/path.slope+c[1] <= h+1])
+            # print(c[0], c[1], -exp)
             f = q**(-exp)*(dminus(dplus(f, level), level+1) - dplus(dminus(f, level), level-1))/(q-1)
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 0:
             exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/path.slope+c[1] <= h+1])
+            # print(c[0], c[1], exp)
             f *= q**exp
         else:
             raise ValueError('Something went wrong here.')
 
-    f *= t**path.area()
+    # f *= t**path.area()
     return Symqt.schur()(f)
 
 
@@ -130,10 +132,20 @@ def unicellular(path):
 def qteval(f, q=q, t=t, u=u, v=v):
     if f == 0:
         return 0
-    elif QSymqt.Fundamental()(f).is_symmetric():
-        return sum(cf.subs(q=q, t=t, u=u, v=v)*Symqt.schur()(mu) for (mu, cf) in Symqt.schur()(f))
-    else:
-        return sum(cf.subs(q=q, t=t, u=u, v=v)*QSymqt.Fundamental()(mu) for (mu, cf) in QSymqt.Fundamental()(f))
+    if f in QSymqt:
+        return (
+            sum(
+                cf.subs(q=q, t=t, u=u, v=v) * Symqt.schur()(mu)
+                for (mu, cf) in Symqt.schur()(f)
+            )
+            if QSymqt.Fundamental()(f).is_symmetric()
+            else sum(
+                cf.subs(q=q, t=t, u=u, v=v) * QSymqt.Fundamental()(mu)
+                for (mu, cf) in QSymqt.Fundamental()(f)
+            )
+        )
+    length = len(list(f)[0][0])
+    return sum(cf.subs(q=q, t=t, u=u, v=v) * tensor([Symqt.schur()(mu[i]) for i in range(length)]) for (mu, cf) in tensor([Symqt.schur()]*length)(f))
 
 
 def omega(f):
@@ -148,10 +160,7 @@ def omega_bar(f):
 
 def scalar(f, g):
     # Hall scalar product on Sym.
-    if f == 0 or g == 0:
-        return 0
-    else:
-        return (f * Symqt.schur()[0]).scalar(g * Symqt.schur()[0])
+    return 0 if f == 0 or g == 0 else (f * Symqt.one()).scalar(g * Symqt.one())
 
 
 def star_scalar(f, g):
@@ -174,12 +183,33 @@ def nabla(f, power=1):
     return 0 if f == 0 else f.nabla(power=power)
 
 
+def super_nabla(f, n=1):
+    # The super-nabla operator
+    if n == 0:
+        return f
+    if f in Symqt:
+        return sum(cf * tensor([Symqt.macdonald().Ht()(mu)]*(n+1)) for (mu, cf) in Symqt.macdonald().Ht()(f))
+    length = len(list(f)[0][0])
+    return sum(cf * tensor([Symqt.macdonald().Ht()(mu[i]) for i in range(length)] +
+                           [Symqt.macdonald().Ht()(mu[-1])]*n) for (mu, cf) in tensor([Symqt.macdonald().Ht()]*length)(f))
+
+
+def plethystic_substitution(f, x=None):
+    # Plethystic substitution.
+    if x is None:
+        x = [Symqt.schur()[1]]
+    if f in Symqt:
+        return f(x)
+    length = len(list(f)[0][0])
+    return sum(cf * tensor([Symqt.schur()(mu[i])(x[i]) for i in range(length)]) for (mu, cf) in tensor([Symqt.schur()]*length)(f))
+
+
 def Delta(f, g):
     # Delta operator.
     if g == 0:
         return 0
-    g = g*Symqt.schur()[0]
-    return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.schur()[0])*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
+    g = g*Symqt.one()
+    return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.one())*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
 def Deltaprime(f, g):
@@ -187,7 +217,7 @@ def Deltaprime(f, g):
     if g == 0:
         return 0
     else:
-        return Symqt.schur()(sum(cf*f((B_mu(mu)-1)*Symqt.schur()[0])*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
+        return Symqt.schur()(sum(cf*f((B_mu(mu)-1)*Symqt.one())*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
 def Pi(f, power=1):
@@ -197,7 +227,7 @@ def Pi(f, power=1):
     elif f.degree() == 0:
         return 0
     else:
-        return sum(sum(Symqt.elementary()[i]((B_mu(mu)-1)*Symqt.schur()[0])*(-1)**i for i in range(f.degree()))**power
+        return sum(sum(Symqt.elementary()[i]((B_mu(mu)-1)*Symqt.one())*(-1)**i for i in range(f.degree()))**power
                    * (cf * Symqt.macdonald().Ht()(mu)) for (mu, cf) in Symqt.macdonald().Ht()(f))
 
 
@@ -228,7 +258,7 @@ def Theta(f, g):
     return Symqt.schur()(sf)
 
 
-def C_alpha(alpha, f=Symqt.schur()[0]):
+def C_alpha(alpha, f=Symqt.one()):
     # Zabrocki's operator C_\alpha.
     if len(alpha) == 0:
         return f
@@ -237,7 +267,7 @@ def C_alpha(alpha, f=Symqt.schur()[0]):
     return C_alpha(alpha[:-1], sf)
 
 
-def B_alpha(alpha, f=Symqt.schur()[0]):
+def B_alpha(alpha, f=Symqt.one()):
     # Zabrocki's operator B_\alpha. It's reversed wrt C_\alpha, because reasons.
     if len(alpha) == 0:
         return f
@@ -249,7 +279,7 @@ def B_alpha(alpha, f=Symqt.schur()[0]):
 def E_nk(n, k):
     # The E_{n,k} symmetric functions.
     return sum(
-        C_alpha(alpha, Symqt.schur()[0])
+        C_alpha(alpha, Symqt.one())
         for alpha in Compositions(n)
         if len(alpha) == k
     )
@@ -271,8 +301,8 @@ def Q_mn(m, n, mu=None, f=None):
     if mu is None:
         mu = [1]
     if f is None:
-        #f = Symqt.schur()[0]
-        f = (-1)**n * Symqt.schur()[0]
+        # f = Symqt.one()
+        f = (-1)**n * Symqt.one()
 
     if len(mu) == 0:
         return f
@@ -309,7 +339,7 @@ def F_mn(m, n, f):
 
     # return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
 
-    return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.schur()[0]) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
+    return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.one()) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
 
 
 def iota(mu):
@@ -360,10 +390,10 @@ def E_mn(m, n, r):
     if (m, n) == (0, 0):
         return 0
     d = gcd(m, n)
-    return F_mn(m/d, n/d, E_nk(d, r) * Symqt.schur()[0])
+    return F_mn(m/d, n/d, E_nk(d, r) * Symqt.one())
 
 
-def C_alpha_mn(m, n, alpha, f=Symqt.schur()[0]):
+def C_alpha_mn(m, n, alpha, f=Symqt.one()):
     if (m, n) == (0, 0):
         return 0
     d = gcd(m, n)
@@ -465,7 +495,7 @@ def dequal(f, k):
 
 
 def dplusstar(f, k):
-    substitutions = [qq(k+1), tt(k+1), uu(k+1)] + [yy(k+1, i+1) for i in range(k)] + [tt(k+1)*yy(k+1, 0)]
+    substitutions = [qq(k+1), tt(k+1), uu(k+1), vv(k+1)] + [yy(k+1, i+1) for i in range(k)] + [tt(k+1)*yy(k+1, 0)]
     return act_on_coefficients(lambda g: g(substitutions), dplus0(f, k), k+1)
 
 
@@ -503,8 +533,8 @@ def dminus(f, k):
         T = RT.gens()[0]
         num = RT(cf.numerator()(list(RR(k-1).gens())+[T]))
         for i in range(num.degree()+1):
-            f2 += num[i]/den * VV(k-1).monomial()(mu) * VV(k-1).elementary()[i]*(-1)**i \
-                * (1 if i > 0 else 1-uu(k-1)*qq(k-1)**(1-k))
+            f2 += num[i]/den * VV(k-1).monomial()(mu) * VV(k-1).elementary()[i]*(-1)**i  # \
+            # * (1 if i > 0 else 1-uu(k-1)*qq(k-1)**(1-k))
     return f2
 
 
@@ -623,7 +653,7 @@ def rho(m, n, operator, f, k):
                 f = TT(f, k, j)
             f = (q**(-k+1) / (q-1)) * (dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
             # print(f)
-            f += (q*t)**(-1) * u * (1 + u*yy(k, 0)) * yy(k, 0) * act_as_z1(f, k)
+            # f += (q*t)**(-1) * u * (1 + u*yy(k, 0)) * yy(k, 0) * act_as_z1(f, k)
         elif m == 1 and n == 0:
             for j in range(i):
                 f = TTstar(f, k, i-j-1)

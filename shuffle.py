@@ -33,23 +33,28 @@ def shuffle_list(l):
         return [y for x in shuffle_two(l[0], l[1]) for y in shuffle_list([x] + shuffle_list(l[2:]))]
 
 
-def shuffle_munu(mu=[], nu=[]):
+def shuffle_munu(mu=None, nu=None):
     # Given two compositions mu, nu, it returns the list of all shuffles
     # of the lists [1, 2, ..., mu[1]], [mu[1]+1, mu[1]+2, ..., mu[1]+mu[2]], ...
     # of the lists [sum([mu])+nu[1], sum([mu])+nu[1]-1, ..., sum([mu])], ...
 
+    if mu is None:
+        mu = []
+    if nu is None:
+        nu = []
+
     sh_mu = [[]]
-    for i in range(0, len(mu)):
+    for i in range(len(mu)):
         auxsh = []
         for ww in sh_mu:
             auxsh = auxsh + list(shuffle_two(ww, [j + sum(mu[:i]) for j in range(1, mu[i]+1)]))
         sh_mu = auxsh
 
     sh_nu = [[]]
-    for i in range(0, len(nu)):
+    for i in range(len(nu)):
         auxsh = []
         for ww in sh_nu:
-            auxsh = auxsh + list(shuffle_two(ww, [sum(mu) + sum(nu[:i+1]) - j for j in range(0, nu[i])]))
+            auxsh = auxsh + list(shuffle_two(ww, [sum(mu) + sum(nu[:i+1]) - j for j in range(nu[i])]))
         sh_nu = auxsh
 
     return [z for x in sh_mu for y in sh_nu for z in shuffle_two(x, y)]
