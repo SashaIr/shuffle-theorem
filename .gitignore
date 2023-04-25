@@ -127,3 +127,6 @@ dmypy.json
 
 # VSCode settings
 *.code-workspace
+
+# Project settings
+LaTeX

@@ -30,13 +30,15 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
 
     # Compiles the LaTeX file, then deletes the 'Temp' folder, recreates it with all the new files.
     # If pdf_viewer is set to None, it uses the deafult one.
-    os.system(f'pdflatex -quiet {folder}/{filename}.tex')
+    os.system(f'pdflatex -interaction=batchmode {folder}/{filename}.tex')
     os.system('rm ' + '-r ' + folder + '/Temp')
     os.system(f'mkdir {folder}/Temp')
     os.rename(f'{folder}/{filename}.tex', f'{folder}/Temp/{filename}.tex')
     os.rename(f'{filename}.pdf', f'{folder}/Temp/{filename}.pdf')
     os.rename(f'{filename}.log', f'{folder}/Temp/{filename}.log')
     os.rename(f'{filename}.aux', f'{folder}/Temp/{filename}.aux')
+
+    run_in_background = ''
 
     if pdf_viewer is None:
         if sys.platform in ['win32', 'win64']:  # Windows environment
@@ -45,6 +47,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
             pdf = 'open'
         elif sys.platform in ['linux', 'linux2']:  # Linux environment
             pdf = 'xdg-open'
+            run_in_background = '&'
         elif sys.platform == 'cygwin':  # Sage environment
             pdf = 'cygstart'
         else:
@@ -52,7 +55,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     else:
         pdf = pdf_viewer
 
-    os.system(f'{pdf} {folder}/Temp/{filename}.pdf')
+    os.system(f'{pdf} {folder}/Temp/{filename}.pdf {run_in_background}')
 
     return None
 
