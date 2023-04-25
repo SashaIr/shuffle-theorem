@@ -234,10 +234,10 @@ class LatticePath(ClonableIntArray):
         self.width = self.length-self.height
 
         # It's the slope, corrected to disregard the decorations.
-        self.slope = Rational(self.width / self.height)
-        # self.slope = 1 if self.width == self.height \
-        #     else Rational((self.width - len(self.rises) - len(self.valleys)) /
-        #                   (self.height - len(self.rises) - len(self.valleys)))
+        # self.slope = Rational(self.width / self.height)
+        self.slope = 1 if self.width == self.height \
+            else Rational((self.width - len(self.rises) - len(self.valleys)) /
+                          (self.height - len(self.rises) - len(self.valleys)))
 
         # It's the disance between the main diagonal and the base diagonal.
         self.shift = - min(self.area_word()) if self.height > 0 else 0
@@ -451,103 +451,126 @@ class LatticePath(ClonableIntArray):
             if i not in self.rises
         )
 
-    def dinv(self):
+    # # def dinv(self):
 
-        dinv = 0  # Initializes dinv to 0.
+    # #     dinv = 0  # Initializes dinv to 0.
 
-        # Goes through the letters of the area word.
-        for i in range(self.height):
-            if self.area_word()[i] < 0:  # Bonus dinv
-                if self.labels is None or self.labels[i] > 0:
-                    dinv += 1
-            if i not in self.valleys:  # Skip decorated valleys
-                for j in range(i+1, self.height):  # Looks at the right.
-                    if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
-                        # Checks labels
-                        if self.labels is None or self.labels[j] > self.labels[i]:
-                            dinv += 1
-                    if not (i in self.rises and i-1 in self.valleys):
-                        if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
-                            # Checks labels
-                            if self.labels is None or self.labels[j] < self.labels[i]:
-                                dinv += 1
-            elif i in self.valleys:  # Subtract 1 for each decorated valley
-                dinv += -1
+    # #     # Goes through the letters of the area word.
+    # #     for i in range(self.height):
+    # #         if self.area_word()[i] < 0:  # Bonus dinv
+    # #             if self.labels is None or self.labels[i] > 0:
+    # #                 dinv += 1
+    # #         if i not in self.valleys:  # Skip decorated valleys
+    # #             for j in range(i+1, self.height):  # Looks at the right.
+    # #                 if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
+    # #                     # Checks labels
+    # #                     if self.labels is None or self.labels[j] > self.labels[i]:
+    # #                         dinv += 1
+    # #                 if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
+    # #                     # Checks labels
+    # #                     if self.labels is None or self.labels[j] < self.labels[i]:
+    # #                         dinv += 1
+    # #         elif i in self.valleys:  # Subtract 1 for each decorated valley
+    # #             dinv += -1
 
-        return dinv
+    # #     return dinv
 
     # def dinv(self):
-    #     # Returns the dinv. If the path is labelled, it takes the labelling into account.
-    #     # Currently works for any rectangular path with no decorated rises, and any square path.
-    #     # TODO: It does not work for any rectangular path with decorated rises.
-    #     # TODO: It does not allow for decorated contractible valleys.
 
-    #     temp_dinv = sum(
-    #         len(
-    #             [
-    #                 j
-    #                 for j in range(self.height)
-    #                 if (
-    #                     (self.labels is None or self.labels[i] < self.labels[j])
-    #                     and (
-    #                         (self.area_word()[i], i)
-    #                         < (self.area_word()[j], j)
-    #                         < (
-    #                             self.area_word()[i]
-    #                             + (1 if i in self.rises else self.slope),
-    #                             i,
-    #                         )
-    #                     )
-    #                 )
-    #             ]
-    #         )
-    #         for i in range(self.height)
-    #     )
+    #     dinv = 0  # Initializes dinv to 0.
 
-    #     # max_dinv = 0
-    #     # for i in range(self.height):
-    #     #     max_dinv += len([j for j in range(self.height) if (
-    #     #         (self.area_word()[i], i) < (self.area_word()[j], j) < (
-    #     #             self.area_word()[i] + (1 if i in self.rises else self.slope), i)
-    #     #     )])
+    #     # Goes through the letters of the area word.
+    #     for i in range(self.height):
+    #         if self.area_word()[i] < 0:  # Bonus dinv
+    #             if self.labels is None or self.labels[i] > 0:
+    #                 dinv += 1
+    #         if ((i < self.height-1 and i not in self.valleys and not (i in self.rises and i+1 in self.valleys)) or (i > 0 and i in self.valleys and i-1 in self.rises)):  # Skip decorated valleys
+    #             for j in range(i+1, self.height):  # Looks at the right.
+    #                 if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
+    #                     # Checks labels
+    #                     if self.labels is None or self.labels[j] > self.labels[i]:
+    #                         dinv += 1
+    #                 if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
+    #                     # Checks labels
+    #                     if self.labels is None or self.labels[j] < self.labels[i]:
+    #                         dinv += 1
+    #         if i in self.valleys:  # Subtract 1 for each decorated valley
+    #             dinv += -1
 
-    #     # alt_ferrer_dinv = 0
-    #     # ferrer = self.ferrer()
+    #     return dinv
 
-    #     # for c in ferrer.cells():
-    #     #     if (self.height*ferrer.arm_length(*c) <= self.width*(ferrer.leg_length(*c)+1)
-    #     #             and self.width*ferrer.leg_length(*c) < self.height*(ferrer.arm_length(*c)+1)):
-    #     #         alt_ferrer_dinv += 1
+    def dinv(self):
+        # Returns the dinv. If the path is labelled, it takes the labelling into account.
+        # Currently works for any rectangular path with no decorated rises, and any square path.
+        # TODO: It does not work for any rectangular path with decorated rises.
+        # TODO: It does not allow for decorated contractible valleys.
 
-    #     ferrer_dinv = 0
-    #     ferrer = self.ferrer()
+        temp_dinv = sum(
+            len(
+                [
+                    j
+                    for j in range(self.height)
+                    if (
+                        (self.labels is None or self.labels[i] < self.labels[j])
+                        and (
+                            (self.area_word()[i], i)
+                            < (self.area_word()[j], j)
+                            < (
+                                self.area_word()[i]
+                                + (1 if i in self.rises else self.slope),
+                                i,
+                            )
+                        )
+                    )
+                ]
+            )
+            for i in range(self.height)
+        )
 
-    #     for c in ferrer.cells():
-    #         if (self.height*(ferrer.arm_length(*c)+1) <= self.width*(ferrer.leg_length(*c)+1)
-    #                 and self.width*ferrer.leg_length(*c) < self.height*ferrer.arm_length(*c)):
-    #             ferrer_dinv += 1
+        # max_dinv = 0
+        # for i in range(self.height):
+        #     max_dinv += len([j for j in range(self.height) if (
+        #         (self.area_word()[i], i) < (self.area_word()[j], j) < (
+        #             self.area_word()[i] + (1 if i in self.rises else self.slope), i)
+        #     )])
 
-    #         if (self.height*ferrer.arm_length(*c) <= self.width*ferrer.leg_length(*c)
-    #                 and self.width*(ferrer.leg_length(*c)+1) < self.height*(ferrer.arm_length(*c)+1)):
-    #             ferrer_dinv -= 1
+        # alt_ferrer_dinv = 0
+        # ferrer = self.ferrer()
 
-    #     bonus_dinv = len([i for i in range(self.height) if self.area_word()[i] < 0
-    #                       and (self.labels is None or self.labels[i] > 0)])
+        # for c in ferrer.cells():
+        #     if (self.height*ferrer.arm_length(*c) <= self.width*(ferrer.leg_length(*c)+1)
+        #             and self.width*ferrer.leg_length(*c) < self.height*(ferrer.arm_length(*c)+1)):
+        #         alt_ferrer_dinv += 1
 
-    #     # alt_bonus_dinv = 0
-    #     # area_coordinate = 0
-    #     # for i in self.path:
-    #     #     if i == 1:
-    #     #         area_coordinate += self.slope
-    #     #     else:
-    #     #         area_coordinate -= 1
-    #     #         if area_coordinate < 0:
-    #     #             alt_bonus_dinv += 1
+        ferrer_dinv = 0
+        ferrer = self.ferrer()
 
-    #     # print(temp_dinv, max_dinv, alt_ferrer_dinv, alt_bonus_dinv)
+        for c in ferrer.cells():
+            if (self.height*(ferrer.arm_length(*c)+1) <= self.width*(ferrer.leg_length(*c)+1)
+                    and self.width*ferrer.leg_length(*c) < self.height*ferrer.arm_length(*c)):
+                ferrer_dinv += 1
 
-    #     # return temp_dinv - max_dinv + alt_ferrer_dinv + alt_bonus_dinv
-    #     return temp_dinv + ferrer_dinv + bonus_dinv
+            if (self.height*ferrer.arm_length(*c) <= self.width*ferrer.leg_length(*c)
+                    and self.width*(ferrer.leg_length(*c)+1) < self.height*(ferrer.arm_length(*c)+1)):
+                ferrer_dinv -= 1
+
+        bonus_dinv = len([i for i in range(self.height) if self.area_word()[i] < 0
+                          and (self.labels is None or self.labels[i] > 0)])
+
+        # alt_bonus_dinv = 0
+        # area_coordinate = 0
+        # for i in self.path:
+        #     if i == 1:
+        #         area_coordinate += self.slope
+        #     else:
+        #         area_coordinate -= 1
+        #         if area_coordinate < 0:
+        #             alt_bonus_dinv += 1
+
+        # print(temp_dinv, max_dinv, alt_ferrer_dinv, alt_bonus_dinv)
+
+        # return temp_dinv - max_dinv + alt_ferrer_dinv + alt_bonus_dinv
+        return temp_dinv + ferrer_dinv + bonus_dinv
 
     def zero(self):
         return 0

@@ -82,6 +82,7 @@ def characteristic_function(path):
 
     f = XX0(0)
     level = 0
+    slope = path.width/path.height
 
     for c in collisions:
         # if c == (0, 0):
@@ -101,17 +102,17 @@ def characteristic_function(path):
             f = dminus(f, level)
             level -= 1
         elif path[c[0]+c[1]-1] == 1 and path[c[0]+c[1]] == 1:
-            exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/path.slope+c[1] <= h+1])
+            exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/slope+c[1] <= h+1])
             # print(c[0], c[1], -exp)
             f = q**(-exp)*(dminus(dplus(f, level), level+1) - dplus(dminus(f, level), level-1))/(q-1)
         elif path[c[0]+c[1]-1] == 0 and path[c[0]+c[1]] == 0:
-            exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/path.slope+c[1] <= h+1])
+            exp = len([h for h in range(c[1], path.height) if h < (path.columns()[h]-c[0])/slope+c[1] <= h+1])
             # print(c[0], c[1], exp)
             f *= q**exp
         else:
             raise ValueError('Something went wrong here.')
 
-    # f *= t**path.area()
+    f *= t**path.area()
     return Symqt.schur()(f)
 
 
@@ -296,13 +297,10 @@ def D_n(n, f):
     return Q_mn(1, n, f=f)
 
 
-def Q_mn(m, n, mu=None, f=None):
+def Q_mn(m, n, mu=None, f=Symqt.one()):
 
     if mu is None:
         mu = [1]
-    if f is None:
-        # f = Symqt.one()
-        f = (-1)**n * Symqt.one()
 
     if len(mu) == 0:
         return f
@@ -339,7 +337,10 @@ def F_mn(m, n, f):
 
     # return sum(((q*t-1)/(q*t))**len(mu) * scalar(f, Symqt.forgotten()(mu)((q*t)/(q*t-1)*Symqt.schur()[1])) * Q_mn(m, n, mu=mu) for mu in Partitions(f.degree()))
 
-    return sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.one()) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
+    d = f.degree()  # I have no idea why this sign is needed, but it is.
+    sign = (-1)**(m*d*(n*d-1))
+
+    return sign * sum(cf * ((q*t-1)/(q*t))**len(mu) * Q_mn(m, n, mu=mu, f=Symqt.one()) for (mu, cf) in Symqt.homogeneous()(f((q*t)/(1-q*t)*Symqt.schur()[1])))
 
 
 def iota(mu):
@@ -447,7 +448,7 @@ def XX(k):
 
 @cached_function
 def XX0(k):
-    return VV(k).monomial()([])
+    return VV(k).one()
 
 
 def delta0(f, k, x, y):
@@ -577,13 +578,17 @@ def QVA(k):
 
 
 # Stuff for actions
-def act_as_y1(f, k):
+def act_as_y1(f, k, power=1):
+    if power > 1:
+        return act_as_y1(act_as_y1(f, k, power-1), k, 1)
     for i in range(k-1):
         f = TT(f, k, k-i-2)
     return (1 / (q**(k-1)*(q-1)))*(dplus(dminus(f, k), k-1) - dminus(dplus(f, k), k+1))
 
 
-def act_as_z1(f, k):
+def act_as_z1(f, k, power=1):
+    if power > 1:
+        return act_as_z1(f, k, power-1)
     if f == 0:
         return 0
     for i in range(k-1):
