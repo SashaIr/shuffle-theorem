@@ -66,7 +66,7 @@ def _format_constraints(constraints, reverse=False):
         return formatted_constraints
 
 
-def _generate_lattice_paths(m, n, shift=None, rises=[], valleys=[], _level=0, _slope=None, _going_up=False, _flag=False):
+def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0, _slope=None, _going_up=False, _flag=False):
     '''
     Builds all the lattice paths from (0,0) to (m,n), as generator,
     where a path is a 0-1 sequence where 0 denotes an east step, 1 denotes a north step.
@@ -79,6 +79,10 @@ def _generate_lattice_paths(m, n, shift=None, rises=[], valleys=[], _level=0, _s
     The variables _level, _slope, _going_up, and _flag are internal.
     '''
 
+    if rises is None:
+        rises = []
+    if valleys is None:
+        valleys = []
     if n == 0:
         if shift is None or _flag is True:
             yield [0]*m
@@ -304,18 +308,13 @@ class LatticePath(ClonableIntArray):
                     and self.area_word()[0] == 0
                     and labelling[0] == 0
                 )
-                or (
-                    len(
-                        [
-                            i
-                            for i in range(self.height)
-                            if self.area_word()[i] == -self.shift
-                            and labelling[i] > 0
-                            and i not in self.valleys
-                        ]
-                    )
-                    == 0
-                )
+                or not [
+                    i
+                    for i in range(self.height)
+                    if self.area_word()[i] == -self.shift
+                    and labelling[i] > 0
+                    and i not in self.valleys
+                ]
             )
         ]
 
@@ -725,7 +724,7 @@ class RectangularDyckPath(RectangularPath):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
     def check(self):
-        if not (self.shift == 0):
+        if self.shift != 0:
             raise ValueError(f'The path\'s shift is not 0')
 
 
@@ -736,7 +735,7 @@ class SquarePath(RectangularPath):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
     def check(self):
-        if not self.width == self.height:
+        if self.width != self.height:
             raise ValueError('Height and width are not the same')
 
     def dinv(self):
@@ -744,20 +743,21 @@ class SquarePath(RectangularPath):
 
         # Goes through the letters of the area word.
         for i in range(self.height):
-            if self.area_word()[i] < 0:  # Bonus dinv
-                if self.labels is None or self.labels[i] > 0:
-                    dinv += 1
+            if self.area_word()[i] < 0 and (
+                self.labels is None or self.labels[i] > 0
+            ):
+                dinv += 1
             if i not in self.valleys:  # Skip decorated valleys
                 for j in range(i+1, self.height):  # Looks at the right.
-                    if self.area_word()[j] == self.area_word()[i]-1:  # Secondary dinv
-                        # Checks labels
-                        if self.labels is None or self.labels[j] < self.labels[i]:
-                            dinv += 1
+                    if self.area_word()[j] == self.area_word()[i] - 1 and (
+                        self.labels is None or self.labels[j] < self.labels[i]
+                    ):
+                        dinv += 1
                 for j in range(i+1, self.height):
-                    if self.area_word()[j] == self.area_word()[i]:  # Primary dinv
-                        # Checks labels
-                        if self.labels is None or self.labels[j] > self.labels[i]:
-                            dinv += 1
+                    if self.area_word()[j] == self.area_word()[i] and (
+                        self.labels is None or self.labels[j] > self.labels[i]
+                    ):
+                        dinv += 1
             else:  # Subtract 1 for each decorated valley
                 dinv += -1
 
@@ -892,10 +892,10 @@ class LatticePathsFactory(SetFactory):
         args, kwargs = options
 
         for i, arg in enumerate(args):
-            if arg != defaults[keys[i]] and arg != constraints[keys[i]]:
+            if arg not in [defaults[keys[i]], constraints[keys[i]]]:
                 constraints[keys[i]] = arg
 
-        for i, key in enumerate(defaults):
+        for key in defaults:
             if key in kwargs and kwargs[key] != defaults[key] and kwargs[key] != constraints[key]:
                 constraints[key] = kwargs[key]
 
@@ -1016,7 +1016,7 @@ class RectangularDyckPaths_all(RectangularPaths_all):
         )
 
     def __repr__(self):
-        return f'Rectangular Dyck Paths'
+        return 'Rectangular Dyck Paths'
 
     def check_element(self, element, check=True):
         return True
@@ -1077,11 +1077,7 @@ class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
         self._height = height
         self._kwargs = kwargs
 
-        if self._width == self._height:
-            square = True
-        else:
-            square = False
-
+        square = self._width == self._height
         adjusted_height = height
 
         if 'decorated rises' in kwargs:
@@ -1125,33 +1121,34 @@ class RectangularPaths_size_shift_redirect(ParentWithSetFactory, DisjointUnionEn
         self._shift = shift
         self._kwargs = kwargs
 
-        if width == height:
-            square = True
-        else:
-            square = False
-
+        square = width == height
         ParentWithSetFactory.__init__(
             self, _format_constraints(((), {**kwargs, 'width': width, 'height': height, 'shift': shift, 'square': square})), policy, category=FiniteEnumeratedSets()
         )
         DisjointUnionEnumeratedSets.__init__(
-            self, Family(
-                [x for x in range(1)],
-                lambda x: _paths_size_shift(self.facade_policy(), width, height, shift, **kwargs)
+            self,
+            Family(
+                list(range(1)),
+                lambda x: _paths_size_shift(
+                    self.facade_policy(), width, height, shift, **kwargs
+                ),
             ),
-            facade=True, keepkey=False, category=self.category()
+            facade=True,
+            keepkey=False,
+            category=self.category(),
         )
 
     def __repr__(self):
         if self._height == self._width:
-            if self._shift == 0:
-                return f'Dyck paths of size {self._width}'
-            else:
-                return f'Square paths of size {self._width} with shift {self._shift}'
+            return (
+                f'Dyck paths of size {self._width}'
+                if self._shift == 0
+                else f'Square paths of size {self._width} with shift {self._shift}'
+            )
+        if self._shift == 0:
+            return f'Rectangular Dyck paths of size {self._width}'
         else:
-            if self._shift == 0:
-                return f'Rectangular Dyck paths of size {self._width}'
-            else:
-                return f'Rectangular paths of size {self._width} with shift {self._shift}'
+            return f'Rectangular paths of size {self._width} with shift {self._shift}'
 
 
 class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
@@ -1163,11 +1160,7 @@ class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
         self._shift = shift
         self._kwargs = kwargs
 
-        if self._width == self._height:
-            square = True
-        else:
-            square = False
-
+        square = self._width == self._height
         ParentWithSetFactory.__init__(
             self, _format_constraints(((), {**kwargs, 'height': height, 'width': width, 'shift': shift, 'square': square})), policy, category=FiniteEnumeratedSets()
         )
