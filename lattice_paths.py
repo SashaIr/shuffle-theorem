@@ -631,8 +631,8 @@ class LatticePath(ClonableIntArray):
         path_latex_options = self._latex_options.copy()
         if 'bounce path' not in path_latex_options:
             path_latex_options['bounce path'] = self.parent().options.latex_bounce_path
-        if 'colour' not in path_latex_options:
-            path_latex_options['colour'] = self.parent().options.latex_colour
+        if 'color' not in path_latex_options:
+            path_latex_options['color'] = self.parent().options.latex_color
         if 'diagonal' not in path_latex_options:
             path_latex_options['diagonal'] = self.parent().options.latex_diagonal
         if 'tikz_scale' not in path_latex_options:
@@ -652,7 +652,7 @@ class LatticePath(ClonableIntArray):
 
         latex.add_package_to_preamble_if_available('tikz')
         latex_options = self.latex_options()
-        colour = latex_options['colour']
+        color = latex_options['color']
         line_width = latex_options['line width']
         scale = latex_options['tikz_scale']
         extra_stuff = ''  # latex_options['extra stuff']
@@ -675,7 +675,7 @@ class LatticePath(ClonableIntArray):
             tikz += ';\n'
             tikz += '    \\end{scope}\n\n'
 
-        tikz += f'    \\draw[{colour}, line width={line_width}pt] (0,0)'
+        tikz += f'    \\draw[{color}, line width={line_width}pt] (0,0)'
         labels = ''
 
         x = y = 0
@@ -698,10 +698,10 @@ class LatticePath(ClonableIntArray):
         if latex_options['show_stats'] == True:
 
             stats += '      \\node[below left] at (%d,0) {' % (self.width)
-            colours = ['blue', 'red', 'green']
+            colors = ['blue', 'red', 'green']
 
-            for colour, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
-                stats += ' \\color{%s}{$%d$}' % (colours[colour % 3], getattr(self, stat)())
+            for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
+                stats += ' \\color{%s}{$%d$}' % (colors[color % 3], getattr(self, stat)())
             stats += '};\n'
 
         return (tikz + labels + rises + valleys + stats + extra_stuff + '\\end{tikzpicture}')
@@ -979,9 +979,9 @@ class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
                                 description='The default value for the line width as a '
                                 'multiple of the tikz scale when latexed.',
                                 checker=lambda x: True)  # More trouble than it's worth to check
-        latex_colour = dict(default='blue!60',
-                            description='The default value for the colour when latexed.',
-                            checker=lambda x: isinstance(x, str))
+        latex_color = dict(default='blue!60',
+                           description='The default value for the color when latexed.',
+                           checker=lambda x: isinstance(x, str))
         latex_bounce_path = dict(default=False,
                                  description='The default value for displaying the bounce path when latexed.',
                                  checker=lambda x: isinstance(x, bool))
@@ -1198,9 +1198,9 @@ class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
                                 description='The default value for the line width as a '
                                 'multiple of the tikz scale when latexed.',
                                 checker=lambda x: True)  # More trouble than it's worth to check
-        latex_colour = dict(default='blue!60',
-                            description='The default value for the colour when latexed.',
-                            checker=lambda x: isinstance(x, str))
+        latex_color = dict(default='blue!60',
+                           description='The default value for the color when latexed.',
+                           checker=lambda x: isinstance(x, str))
         latex_bounce_path = dict(default=False,
                                  description='The default value for displaying the bounce path when latexed.',
                                  checker=lambda x: isinstance(x, bool))
