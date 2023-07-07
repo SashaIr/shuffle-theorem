@@ -5,6 +5,7 @@ Tools for the shuffle theorem and variants.
 
 # TODO: Write documentation!
 
+import numpy as np
 from itertools import combinations
 from more_itertools import distinct_combinations
 from multiset import Multiset
@@ -402,7 +403,7 @@ class LatticePath(ClonableIntArray):
         return [self.main_diagonal()[i]-self.columns()[i] for i in range(self.height)]
 
     @cached_method
-    def main_diagonal(self):
+    def main_diagonal_old(self):
         # Returns x-coordinates of the y-integer points of the main diagonal (not the base diagonal).
 
         main_diagonal = [0]
@@ -426,18 +427,76 @@ class LatticePath(ClonableIntArray):
 
     @cached_method
     def columns(self):
-        # Returns the index of the column (numbered starting from 0) containing the label with index i.
+        # Returns the x-coordinate of the i-th vertical step.
 
-        columns = []
+        return [list(self.cells()[i,:]).index(1) for i in range(self.height)]
+    
+    @cached_method
+    def rows(self):
+        # Returns the y-coordinate of the i-th horizontal step.
+
+        return [list(self.cells()[:,i]).index(0)-1 if 0 in list(self.cells()[:,i]) else self.height for i in range(self.width)]
+    
+    @cached_method
+    def main_diagonal(self):
+        # Returns x-coordinates of the y-integer points of the main diagonal (not the base diagonal).
+
+        main_diagonal = [0]
         position = 0
 
-        for i in self.path:
-            if i == 1:
-                columns += [position]
-            else:
-                position += 1
+        for i in range(self.height):
+            position += 1 if i in self.rises else self.slope
+            main_diagonal += [position]
 
-        return columns
+        return main_diagonal
+    
+    @cached_method
+    def base_diagonal(self):
+        # Returns x-coordinates of the y-integer points of the base diagonal.
+
+        return [i+self.shift for i in self.main_diagonal()]
+    
+    @cached_method
+    def cells(self):
+        # Returns the cells under the path.
+
+        cells = np.zeros((self.height, self.width))
+        x = 0
+        y = 0
+        for i in self.path:
+            if i == 0:
+                x += 1
+            else:
+                for j in range(x,self.width):
+                    cells[y,j] = 1
+                y += 1
+        return cells
+    
+    def area_cells(self):
+        area_cells = np.zeros((self.height, self.width))
+
+        for i in range(self.height):
+            if i not in self.rises:
+                for j in range(int(np.ceil(self.base_diagonal()[i]))-1):
+                    area_cells[i,j] = self.cells()[i,j]
+
+        return area_cells
+    
+    def area(self):
+        return sum(self.area_cells)
+    
+    def dinv_cells(self):
+        dinv_cells = np.zeros((self.height, self.width))
+
+        for i in range(self.height):
+            for j in range(self.width):
+                if self.cells()[i,j] == 0:
+                    arm = self.columns()[i] - j
+                    leg = i - self.rows()[j]
+                    if (self.height*arm <= self.width*(leg+1) and self.width*leg < self.height*(arm+1)):
+                        dinv_cells[i,j] = 1
+                    
+        return dinv_cells
 
     def ferrer(self):
         # Returns the (English) Ferrer diagram above the path, as partition.
@@ -480,8 +539,36 @@ class LatticePath(ClonableIntArray):
     def _rectangular_dinv(self):
         # Returns the dinv. If the path is labelled, it takes the labelling into account.
         # Currently works for any rectangular path with no decorated rises, and any square path.
-        # TODO: It does not work for any rectangular path with decorated rises.
-        # TODO: It does not allow for decorated contractible valleys.
+        #! It does NOT work for any rectangular path with decorated rises.
+
+        temp_dinv = 0
+        max_dinv = 0
+        for i in range(self.height):
+            for j in range(self.height):
+                    if (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i in self.rises else self.slope), i):
+                        max_dinv += 1
+                        if (self.labels is None or self.labels[i] < self.labels[j]):
+                            temp_dinv += 1
+
+        bonus_dinv = 0
+        area_coordinate = 0
+        for i in self.path:
+            if i == 1:
+                area_coordinate += self.slope
+            else:
+                area_coordinate -= 1
+                if area_coordinate < 0:
+                    bonus_dinv += 1
+
+        ferrer_dinv = sum(self.dinv_cells())
+
+        return temp_dinv - max_dinv + ferrer_dinv + bonus_dinv
+    
+    def _rectangular_dinv_old(self):
+        # Returns the dinv. If the path is labelled, it takes the labelling into account.
+        # Currently works for any rectangular path with no decorated rises, and any square path.
+        #! It does not work for any rectangular path with decorated rises.
+        #! It does not allow for decorated contractible valleys.
 
         temp_dinv = sum(
             len(
@@ -504,22 +591,6 @@ class LatticePath(ClonableIntArray):
             )
             for i in range(self.height)
         )
-
-        # max_dinv = 0
-        # for i in range(self.height):
-        #     max_dinv += len([j for j in range(self.height) if (
-        #         (self.area_word()[i], i) < (self.area_word()[j], j) < (
-        #             self.area_word()[i] + (1 if i in self.rises else self.slope), i)
-        #     )])
-
-        # alt_ferrer_dinv = 0
-        # ferrer = self.ferrer()
-
-        # for c in ferrer.cells():
-        #     if (self.height*ferrer.arm_length(*c) <= self.width*(ferrer.leg_length(*c)+1)
-        #             and self.width*ferrer.leg_length(*c) < self.height*(ferrer.arm_length(*c)+1)):
-        #         alt_ferrer_dinv += 1
-
         ferrer_dinv = 0
         ferrer = self.ferrer()
 
@@ -534,20 +605,7 @@ class LatticePath(ClonableIntArray):
 
         bonus_dinv = len([i for i in range(self.height) if self.area_word()[i] < 0
                           and (self.labels is None or self.labels[i] > 0)])
-
-        # alt_bonus_dinv = 0
-        # area_coordinate = 0
-        # for i in self.path:
-        #     if i == 1:
-        #         area_coordinate += self.slope
-        #     else:
-        #         area_coordinate -= 1
-        #         if area_coordinate < 0:
-        #             alt_bonus_dinv += 1
-
-        # print(temp_dinv, max_dinv, alt_ferrer_dinv, alt_bonus_dinv)
-
-        # return temp_dinv - max_dinv + alt_ferrer_dinv + alt_bonus_dinv
+        
         return temp_dinv + ferrer_dinv + bonus_dinv
 
     def zero(self):
