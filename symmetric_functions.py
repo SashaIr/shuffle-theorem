@@ -8,12 +8,13 @@ Tools for the shuffle theorem and variants.
 # Import packages.
 from more_itertools import partition
 from math import exp
+from sage.arith.all import binomial
 from sage.arith.misc import gcd, xgcd
 from sage.categories.algebra_functor import GroupAlgebraFunctor
 from sage.categories.tensor import tensor
 from sage.combinat.partition import Partitions
-from sage.combinat.composition import Compositions
-from sage.combinat.permutation import Permutations
+from sage.combinat.composition import Composition, Compositions
+from sage.combinat.permutation import Permutation, Permutations
 from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
 from sage.graphs.digraph import DiGraph
@@ -184,15 +185,15 @@ def nabla(f, power=1):
     return 0 if f == 0 else f.nabla(power=power)
 
 
-def super_nabla(f, n=1):
+def super_nabla(f, power=1):
     # The super-nabla operator
-    if n == 0:
+    if power == 0:
         return f
     if f in Symqt:
-        return sum(cf * tensor([Symqt.macdonald().Ht()(mu)]*(n+1)) for (mu, cf) in Symqt.macdonald().Ht()(f))
+        return sum(cf * tensor([Symqt.macdonald().Ht()(mu)]*(power+1)) for (mu, cf) in Symqt.macdonald().Ht()(f))
     length = len(list(f)[0][0])
     return sum(cf * tensor([Symqt.macdonald().Ht()(mu[i]) for i in range(length)] +
-                           [Symqt.macdonald().Ht()(mu[-1])]*n) for (mu, cf) in tensor([Symqt.macdonald().Ht()]*length)(f))
+                           [Symqt.macdonald().Ht()(mu[-1])]*power) for (mu, cf) in tensor([Symqt.macdonald().Ht()]*length)(f))
 
 
 def plethystic_substitution(f, x=None):
@@ -213,7 +214,7 @@ def Delta(f, g):
     return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.one())*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
-def Deltaprime(f, g):
+def pDelta(f, g):
     # Delta' operator.
     if g == 0:
         return 0
@@ -242,7 +243,7 @@ def Theta(f, g):
     # It's equivalent to Pi(f(Symqt.schur()[1]/((1-q)*(1-t))) * Pi(g, power=-1)), but much faster.
 
     def theta_ek(k, g):
-        # This is Theta(e[k], g). It is computed using the Pieri coefficients for e*[k].
+        # This is Theta(e[k], g). It is computed using the Pieri coefficients for e[k].
         sf = 0
         for (nu, cc) in Symqt.macdonald().Ht()(g):
             wnu = w_mu(nu)
@@ -254,9 +255,11 @@ def Theta(f, g):
 
     if f.degree() == 0:
         return Symqt.schur()(f * g)
-    sf = sum(cc * theta_ek(gamma[0], Theta(Symqt.elementary()[gamma[1:]], g))
-             for (gamma, cc) in Symqt.elementary()(f))
-    return Symqt.schur()(sf)
+
+    elif (g*Symqt.one()).degree() == 0:
+        return 0
+    
+    return Symqt.schur()(sum(cc * theta_ek(gamma[0], Theta(Symqt.elementary()[gamma[1:]], g)) for (gamma, cc) in Symqt.elementary()(f)))
 
 
 def C_alpha(alpha, f=Symqt.one()):
@@ -279,23 +282,50 @@ def B_alpha(alpha, f=Symqt.one()):
 
 def E_nk(n, k):
     # The E_{n,k} symmetric functions.
-    return sum(
-        C_alpha(alpha, Symqt.one())
-        for alpha in Compositions(n)
-        if len(alpha) == k
-    )
+    return sum(C_alpha(alpha, Symqt.one()) for alpha in Compositions(n) if len(alpha) == k)
 
 
 def Xi(f):
-    # This is morally Delta(e[1], Theta(f, 1))
+    # This is essentially Delta(e[1], Theta(f, 1))
     return (1-q)*(1-t)*Delta(Symqt.schur()[1], Pi(f(Symqt.schur()[1]/(1-q)/(1-t))))
 
+# D operators
+@cached_function
+def D0(f):
+    return f - (1-q)*(1-t)*Delta(Symqt.schur()[1], f)
+
+# @cached_function
+def Dn(n, f=Symqt.one()):
+    if n == 0:
+        return D0(f)
+    elif n > 0:
+        # return (-(1-q)*(1-t))**(-n) * sum((-1)**r * binomial(n,r) * Symqt.schur()[1]**r * D0(Symqt.schur()[1]**(n-r)*f) for r in range(n+1))
+        # return (-1)**n * (dminus(yy(1,0)**n * dplusstar(f,0),1))
+        return (-1)**(n-1) * (dminus0(yy(1,0)**(n-1) * dplusstar(f,0),1))
+    else:
+        return sum((-1)**r * binomial(-n,r) * D0(f.skew_by(Symqt.schur()[1]**r)).skew_by(Symqt.schur()[1]**(-n-r)) for r in range(-n+1))
+    
+def D_alpha(alpha, f=Symqt.one()):
+    def d_inner(alpha0, f0):
+        if len(alpha0) == 0:
+            return f0
+        return d_inner(alpha0[:-1], (-yy(1,0))**(alpha0[-1]) * (dplusstar(dminus(f0, 1), 0) + act_as_z1(f0, 1)))
+    return dminus(d_inner(alpha, dplusstar(f, 0)), 1)
+
+def D_beta(beta, f=Symqt.one()):
+    if f == 0:
+        return 0
+    beta = tuple(beta)
+    if not beta:
+        return f
+    elif len(beta) == 1:
+        return Dn(beta[0], f)
+    elif beta[-1] == -(f*Symqt.one()).degree():
+        return D_beta(beta[:-1], Dn(beta[-1], f))
+    else:
+        return D_beta(beta[:-1], Dn(beta[-1], f)) + q*t*D_beta(beta[:-2] + (beta[-2]+1,) + (beta[-1]-1,), f)
+    
 # Stuff from Bergeron's file
-
-
-def D_n(n, f):
-    return Q_mn(1, n, f=f)
-
 
 def Q_mn(m, n, mu=None, f=Symqt.one()):
 
@@ -306,8 +336,8 @@ def Q_mn(m, n, mu=None, f=Symqt.one()):
         return f
     elif len(mu) == 1:
         if m == 0:
-            # return f * Symqt.schur()[1]
-            return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1-q*t)/(q*t))
+            return f * Symqt.schur()[1]
+            #return f * (q*t)/(q*t-1) * Symqt.homogeneous()[n](Symqt.schur()[1] * (1-q*t)/(q*t))
         elif n == 0:
             # This is NOT the same as https://academic.oup.com/imrn/article/2016/14/4229/2451634 if m > 1.
             if m == 1:
@@ -349,22 +379,20 @@ def iota(mu):
 
 def e_mn(m, n=None):
     if n is None:
-        return e_mn(m, m)
-    elif (m, n) == (0, 0):
+        n = m
+    if (m, n) == (0, 0):
         return 0
-    else:
-        d = gcd(m, n)
-        return F_mn(m/d, n/d, Symqt.elementary()[d])
+    d = gcd(m, n)
+    return F_mn(m/d, n/d, Symqt.elementary()[d])
 
 
 def h_mn(m, n=None):
     if n is None:
-        return h_mn(m, m)
-    elif (m, n) == (0, 0):
-        return 0
-    else:
-        d = gcd(m, n)
-        return F_mn(m/d, n/d, (-1/(q*t))**(d-1) * Symqt.homogeneous()[d])
+        n = m
+    if (m, n) == (0, 0):
+        return 0    
+    d = gcd(m, n)
+    return F_mn(m/d, n/d, (-1/(q*t))**(d-1) * Symqt.homogeneous()[d])
 
 
 def p_mn(m, n=None):
@@ -379,12 +407,11 @@ def p_mn(m, n=None):
 
 def pi_mn(m, n=None):
     if n is None:
-        return h_mn(m, m)
-    elif (m, n) == (0, 0):
+        n = m
+    if (m, n) == (0, 0):
         return 0
-    else:
-        d = gcd(m, n)
-        return F_mn(m/d, n/d, sum((-1/(q*t))**j * Symqt.schur()([j+1]+[1]*(d-j-1)) for j in range(d)))
+    d = gcd(m, n)
+    return F_mn(m/d, n/d, sum((-1/(q*t))**j * Symqt.schur()([j+1]+[1]*(d-j-1)) for j in range(d)))
 
 
 def E_mn(m, n, r):
@@ -472,11 +499,12 @@ def TTstar(f, k, i):
 
 
 def dplus0(f, k):
+    if f == 0:
+        return 0
     f1 = sum(
         cf(RR(k + 1).gens()[:-1]) * VV(k + 1).monomial()(p)
         for p, cf in VV(k).monomial()(f)
     )
-
     return f1(XX(k+1)+(qq(k+1)-1)*yy(k+1, k)*XX0(k+1))
 
 

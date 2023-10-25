@@ -268,7 +268,7 @@ class LatticePath(ClonableIntArray):
 
     def qstat(self):
         # Sets a default q-statistic.
-        return self.dinv()
+        return self.zero()
 
     def tstat(self):
         # Sets a default t-statistic.
@@ -497,6 +497,26 @@ class LatticePath(ClonableIntArray):
                         dinv_cells[i,j] = 1
                     
         return dinv_cells
+    
+    def attack_cells(self):
+        attack_cells = np.zeros((self.height, self.height))
+
+        for i in range(self.height):
+            for j in range(i+1, self.height):
+                if (
+                    (self.area_word()[i], i)
+                    < (self.area_word()[j], j)
+                    < (
+                        self.area_word()[i]
+                        + (1 if i in self.rises else self.slope),
+                        i,
+                    )
+                    and self.labels is not None
+                    and self.labels[i] >= self.labels[j]
+                ):
+                    attack_cells[i,j] = 1
+
+        return attack_cells
 
     def ferrer(self):
         # Returns the (English) Ferrer diagram above the path, as partition.
@@ -759,7 +779,7 @@ class LatticePath(ClonableIntArray):
             colors = ['blue', 'red', 'green']
 
             for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
-                stats += ' \\color{%s}{$%d$}' % (colors[color % 3], getattr(self, stat)())
+                stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
             stats += '};\n'
 
         return (tikz + labels + rises + valleys + stats + extra_stuff + '\\end{tikzpicture}')
