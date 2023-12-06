@@ -299,9 +299,9 @@ def Dn(n, f=Symqt.one()):
     if n == 0:
         return D0(f)
     elif n > 0:
-        # return (-(1-q)*(1-t))**(-n) * sum((-1)**r * binomial(n,r) * Symqt.schur()[1]**r * D0(Symqt.schur()[1]**(n-r)*f) for r in range(n+1))
+        return (-(1-q)*(1-t))**(-n) * sum((-1)**r * binomial(n,r) * Symqt.schur()[1]**r * D0(Symqt.schur()[1]**(n-r)*f) for r in range(n+1))
         # return (-1)**n * (dminus(yy(1,0)**n * dplusstar(f,0),1))
-        return (-1)**(n-1) * (dminus0(yy(1,0)**(n-1) * dplusstar(f,0),1))
+        # return (-1)**(n-1) * (dminus0(yy(1,0)**(n-1) * dplusstar(f,0),1))
     else:
         return sum((-1)**r * binomial(-n,r) * D0(f.skew_by(Symqt.schur()[1]**r)).skew_by(Symqt.schur()[1]**(-n-r)) for r in range(-n+1))
     
@@ -309,7 +309,9 @@ def D_alpha(alpha, f=Symqt.one()):
     def d_inner(alpha0, f0):
         if len(alpha0) == 0:
             return f0
-        return d_inner(alpha0[:-1], (-yy(1,0))**(alpha0[-1]) * (dplusstar(dminus(f0, 1), 0) + act_as_z1(f0, 1)))
+        elif len(alpha0) == 1:
+            return (-yy(1,0))**alpha0[0] * f0
+        return d_inner(alpha0[:-1], (dplusstar(dminus((-yy(1,0))**(alpha0[-1]) * f0, 1), 0) + act_as_z1((-yy(1,0))**(alpha0[-1]) * f0, 1)))
     return dminus(d_inner(alpha, dplusstar(f, 0)), 1)
 
 def D_beta(beta, f=Symqt.one()):
