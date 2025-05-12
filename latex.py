@@ -33,6 +33,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
     os.system(f'pdflatex -interaction=batchmode {folder}/{filename}.tex')
     os.system('rm ' + '-r ' + folder + '/Temp')
     os.system(f'mkdir {folder}/Temp')
+    os.system(f'code {folder}/{filename}.tex &')
     os.rename(f'{folder}/{filename}.tex', f'{folder}/Temp/{filename}.tex')
     os.rename(f'{filename}.pdf', f'{folder}/Temp/{filename}.pdf')
     os.rename(f'{filename}.log', f'{folder}/Temp/{filename}.log')

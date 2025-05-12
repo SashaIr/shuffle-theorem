@@ -6,17 +6,14 @@ Tools for the shuffle theorem and variants.
 # TODO: Write documentation!
 
 # Import packages.
-from more_itertools import partition
-from math import exp
 from sage.arith.all import binomial
 from sage.arith.misc import gcd, xgcd
-from sage.categories.algebra_functor import GroupAlgebraFunctor
 from sage.categories.tensor import tensor
 from sage.combinat.partition import Partitions
-from sage.combinat.composition import Composition, Compositions
-from sage.combinat.permutation import Permutation, Permutations
+from sage.combinat.composition import Compositions
 from sage.combinat.sf.sf import SymmetricFunctions
 from sage.combinat.ncsf_qsym.qsym import QuasiSymmetricFunctions
+from sage.functions.other import ceil
 from sage.graphs.digraph import DiGraph
 from sage.combinat.sf.macdonald import cmunu
 from sage.misc.all import cached_function, prod
@@ -51,7 +48,7 @@ QSymqt.inject_shorthands(verbose=False)
 def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
     # Computes the q,t-polynomial associated to any set, a q-statistic, and a t-statistic.
 
-    if x == False:
+    if x is False:
         return sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() for s in items)
 
     f = sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() * QSymqt.Fundamental()(s.gessel(read))
@@ -193,7 +190,7 @@ def super_nabla(f, power=1):
         return sum(cf * tensor([Symqt.macdonald().Ht()(mu)]*(power+1)) for (mu, cf) in Symqt.macdonald().Ht()(f))
     length = len(list(f)[0][0])
     return sum(cf * tensor([Symqt.macdonald().Ht()(mu[i]) for i in range(length)] +
-                           [Symqt.macdonald().Ht()(mu[-1])]*power) for (mu, cf) in tensor([Symqt.macdonald().Ht()]*length)(f))
+        [Symqt.macdonald().Ht()(mu[-1])]*power) for (mu, cf) in tensor([Symqt.macdonald().Ht()]*length)(f))
 
 
 def plethystic_substitution(f, x=None):
@@ -206,20 +203,20 @@ def plethystic_substitution(f, x=None):
     return sum(cf * tensor([Symqt.schur()(mu[i])(x[i]) for i in range(length)]) for (mu, cf) in tensor([Symqt.schur()]*length)(f))
 
 
-def Delta(f, g):
+def Delta(f, g, power=1):
     # Delta operator.
     if g == 0:
         return 0
     g = g*Symqt.one()
-    return Symqt.schur()(sum(cf*f(B_mu(mu)*Symqt.one())*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
+    return Symqt.schur()(sum(cf*((f(B_mu(mu)*Symqt.one()).scalar(Symqt.one()))**power)*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
-def pDelta(f, g):
+def pDelta(f, g, power=1):
     # Delta' operator.
     if g == 0:
         return 0
     else:
-        return Symqt.schur()(sum(cf*f((B_mu(mu)-1)*Symqt.one())*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
+        return Symqt.schur()(sum(cf*(f((B_mu(mu)-1)*Symqt.one())**power)*Symqt.macdonald().Ht()(mu) for (mu, cf) in Symqt.macdonald().Ht()(g)))
 
 
 def Pi(f, power=1):
@@ -229,7 +226,7 @@ def Pi(f, power=1):
     elif f.degree() == 0:
         return 0
     else:
-        return sum(sum(Symqt.elementary()[i]((B_mu(mu)-1)*Symqt.one())*(-1)**i for i in range(f.degree()))**power
+        return sum(sum(Symqt.elementary()[i]((B_mu(mu)-1)*Symqt.one())*(-1)**i for i in range(f.degree())).scalar(Symqt.one())**power
                    * (cf * Symqt.macdonald().Ht()(mu)) for (mu, cf) in Symqt.macdonald().Ht()(f))
 
 
@@ -258,7 +255,7 @@ def Theta(f, g):
 
     elif (g*Symqt.one()).degree() == 0:
         return 0
-    
+
     return Symqt.schur()(sum(cc * theta_ek(gamma[0], Theta(Symqt.elementary()[gamma[1:]], g)) for (gamma, cc) in Symqt.elementary()(f)))
 
 
@@ -289,6 +286,11 @@ def Xi(f):
     # This is essentially Delta(e[1], Theta(f, 1))
     return (1-q)*(1-t)*Delta(Symqt.schur()[1], Pi(f(Symqt.schur()[1]/(1-q)/(1-t))))
 
+
+def Xi_inverse(f):
+    # This is essentially Delta(e[1], Theta(f, 1))
+    return Pi(Delta(Symqt.schur()[1], f, power=-1), power=-1)(Symqt.schur()[1]*(1-q)*(1-t))/(1-q)/(1-t)
+
 # D operators
 @cached_function
 def D0(f):
@@ -304,7 +306,7 @@ def Dn(n, f=Symqt.one()):
         # return (-1)**(n-1) * (dminus0(yy(1,0)**(n-1) * dplusstar(f,0),1))
     else:
         return sum((-1)**r * binomial(-n,r) * D0(f.skew_by(Symqt.schur()[1]**r)).skew_by(Symqt.schur()[1]**(-n-r)) for r in range(-n+1))
-    
+
 def D_alpha(alpha, f=Symqt.one()):
     def d_inner(alpha0, f0):
         if len(alpha0) == 0:
@@ -326,7 +328,7 @@ def D_beta(beta, f=Symqt.one()):
         return D_beta(beta[:-1], Dn(beta[-1], f))
     else:
         return D_beta(beta[:-1], Dn(beta[-1], f)) + q*t*D_beta(beta[:-2] + (beta[-2]+1,) + (beta[-1]-1,), f)
-    
+
 # Stuff from Bergeron's file
 
 def Q_mn(m, n, mu=None, f=Symqt.one()):
@@ -380,12 +382,15 @@ def iota(mu):
 
 
 def e_mn(m, n=None):
-    if n is None:
-        n = m
-    if (m, n) == (0, 0):
-        return 0
-    d = gcd(m, n)
-    return F_mn(m/d, n/d, Symqt.elementary()[d])
+    # if n is None:
+    #     n = m
+    # #! Old reliable code
+    # if (m, n) == (0, 0):
+    #     return 0
+    # d = gcd(m, n)
+    # return (-1)**n * F_mn(m/d, n/d, Symqt.elementary()[d])
+    #! Extremely experimental!
+    return D_alpha([ceil((i + 1) * n / m) - ceil(i * n / m) for i in range(m)])
 
 
 def h_mn(m, n=None):
@@ -507,13 +512,18 @@ def dplus0(f, k):
         cf(RR(k + 1).gens()[:-1]) * VV(k + 1).monomial()(p)
         for p, cf in VV(k).monomial()(f)
     )
+    # for i in range(k):
+    #     f1 = TT(f1, k+1, k-i-1)
     return f1(XX(k+1)+(qq(k+1)-1)*yy(k+1, k)*XX0(k+1))
 
 
 def dplus(f, k):
     if f == 0:
         return 0
-    f = -dplus0(f, k)*yy(k+1, k)
+    f = -dplus0(f, k)
+    # for i in range(k):
+    #     f = TTstar(f, k+1, i)
+    f *= yy(k+1, k)
     for i in range(k):
         f = TT(f, k+1, k-i-1)
     return f
@@ -568,6 +578,19 @@ def dminus(f, k):
             # * (1 if i > 0 else 1-uu(k-1)*qq(k-1)**(1-k))
     return f2
 
+def dcomm(f, k):
+    return (dminus(dplus(f, k), k+1) - dplus(dminus(f, k), k-1))/(q-1)
+
+def dword(w, f=XX0(0)):
+    # w = w[::-1]
+    for (i,x) in enumerate(w):
+        if x == 1:
+            f = dplus(f, sum(w[:i]))
+        elif x == 0:
+            f = dcomm(f, sum(w[:i]))
+        else:
+            f = dminus(f, sum(w[:i]))
+    return f
 
 # Quiver stuff
 

@@ -6,7 +6,7 @@ Tools for the shuffle theorem and variants.
 # TODO: Write documentation!
 
 import numpy as np
-from itertools import combinations
+from itertools import combinations, product
 from more_itertools import distinct_combinations
 from multiset import Multiset
 from six import add_metaclass
@@ -42,7 +42,7 @@ from .symmetric_functions import characteristic_function
 def _format_constraints(constraints, reverse=False):
 
     defaults = {'width': None, 'height': None, 'shift': None, 'square': False,
-                'labelled': True, 'labels': None, 'decorated_rises': 0, 'decorated_valleys': 0, }
+                'labelled': True, 'labels': None, 'decorated_rises': 0, 'decorated_falls':0, 'decorated_valleys': 0, }
 
     if reverse is False:
         args, kwargs = constraints
@@ -67,7 +67,8 @@ def _format_constraints(constraints, reverse=False):
         return formatted_constraints
 
 
-def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0, _slope=None, _going_up=False, _flag=False):
+def _generate_lattice_paths(m, n, shift=None, rises=None, falls=None, valleys=None, _level=0, _slope=None, 
+                            _going_up=False, _flag=False, _falls_flag=False):
     '''
     Builds all the lattice paths from (0,0) to (m,n), as generator,
     where a path is a 0-1 sequence where 0 denotes an east step, 1 denotes a north step.
@@ -75,15 +76,21 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0
     If a shift is specified, it will only build the paths with exactly that shift,
     otherwise it will build all the paths ending east.
 
-    The paths will have rises and valleys in the specified rows.
+    The paths will have rises, falls, and valleys in the specified rows.
 
     The variables _level, _slope, _going_up, and _flag are internal.
     '''
 
+    if falls is not None:
+        _falls_flag = True
+
     if rises is None:
         rises = []
+    if falls is None:
+        falls = []
     if valleys is None:
         valleys = []
+
     if n == 0:
         if shift is None or _flag is True:
             yield [0]*m
@@ -96,8 +103,8 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0
 
         if _slope is None:
 
-            m1 = m-len(rises)-len(valleys)
-            n1 = n-len(rises)-len(valleys)
+            m1 = m-len(rises)-len(falls)-len(valleys)
+            n1 = n-len(rises)-len(falls)-len(valleys)
 
             if m1 <= 0 or n1 <= 0:
                 return None
@@ -105,18 +112,36 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0
             _slope = Rational(m1/n1)
 
         if 0 in rises:
-            if _going_up == True:
+            if _going_up is True:
                 for p in _generate_lattice_paths(
                         m,
                         n-1,
                         shift=shift,
                         rises=[i-1 for i in rises[1:]],
+                        falls=falls,
                         valleys=[i-1 for i in valleys],
                         _level=_level+1,
                         _slope=_slope,
                         _going_up=True,
-                        _flag=_flag):
+                        _flag=_flag,
+                        _falls_flag=_falls_flag):
                     yield [1] + p
+
+        elif -1 in falls:
+            if _going_up is False:
+                for p in _generate_lattice_paths(
+                        m-1,
+                        n,
+                        shift=shift,
+                        rises=rises,
+                        falls=[i-1 for i in falls[1:]],
+                        valleys=valleys,
+                        _level=_level-1,
+                        _slope=_slope,
+                        _going_up=False,
+                        _flag=_flag,
+                        _falls_flag=_falls_flag):
+                    yield [0] + p
 
         else:
             for p in _generate_lattice_paths(
@@ -124,25 +149,29 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0
                     n,
                     shift=shift,
                     rises=rises,
+                    falls=[i-1 for i in falls],
                     valleys=valleys,
-                    _level=_level-1,
+                    _level=(_level-1 if not _falls_flag else _level-Rational(1/_slope)),
                     _slope=_slope,
                     _going_up=False,
-                    _flag=_flag):
+                    _flag=_flag,
+                    _falls_flag=_falls_flag):
                 yield [0] + p
 
             if 0 in valleys:
-                if _going_up == False:
+                if _going_up is False:
                     for p in _generate_lattice_paths(
                             m,
                             n-1,
                             shift=shift,
                             rises=[i-1 for i in rises],
+                            falls=falls,
                             valleys=[i-1 for i in valleys[1:]],
                             _level=_level+1,
                             _slope=_slope,
                             _going_up=True,
-                            _flag=_flag):
+                            _flag=_flag,
+                            _falls_flag=_falls_flag):
                         yield [1] + p
             else:
                 for p in _generate_lattice_paths(
@@ -150,15 +179,17 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, valleys=None, _level=0
                         n-1,
                     shift=shift,
                         rises=[i-1 for i in rises],
+                        falls=falls,
                         valleys=[i-1 for i in valleys],
-                        _level=_level+_slope,
+                        _level=(_level+_slope if not _falls_flag else _level+1),
                         _slope=_slope,
                         _going_up=True,
-                        _flag=_flag):
+                        _flag=_flag,
+                        _falls_flag=_falls_flag):
                     yield [1] + p
 
 
-def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, decorated_rises=0, decorated_valleys=0):
+def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, decorated_rises=0, decorated_falls=0, decorated_valleys=0):
 
     if height is None:
         # If no value is specified, the grid is assumed to be a square.
@@ -169,14 +200,15 @@ def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, d
         labels = tuple([0] + [1]*(height))
 
     for r in combinations(range(1, height), decorated_rises):
-        for v in combinations([i for i in range(height) if i not in r], decorated_valleys):
-            for path in _generate_lattice_paths(width, height, shift=shift, rises=r, valleys=v):
-                if 0 not in v or path[0] == 0:
-                    if labelled is False:
-                        yield path, None, r, v
-                    else:
-                        for l in LatticePath(path, rises=r, valleys=v).labellings(labels):
-                            yield path, l, r, v
+        for f in combinations(range(width-1), decorated_falls):
+            for v in combinations([i for i in range(height) if i not in r], decorated_valleys):
+                for path in _generate_lattice_paths(width, height, shift=shift, rises=r, falls=f, valleys=v):
+                    if 0 not in v or path[0] == 0:
+                        if labelled is False:
+                            yield path, None, r, f, v
+                        else:
+                            for l in LatticePath(path, rises=r, falls=f, valleys=v).labellings(labels):
+                                yield path, l, r, f, v
 
 
 def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
@@ -184,7 +216,7 @@ def _mu_labellings(blocks, label_composition, strict=True, increasing=True):
     if len(blocks) == 0:
         yield []
     else:
-        if strict == True:
+        if strict is True:
             label_choices = combinations(set(label_composition), blocks[0])
         else:
             label_choices = distinct_combinations(label_composition, blocks[0])
@@ -220,17 +252,20 @@ class LatticePath(ClonableIntArray):
     def _auto_parent(cls):
         return RectangularPaths_all(SelfParentPolicy(LatticePaths, cls))
 
-    def __init__(self, parent, path, labels=None, rises=None, valleys=None, latex_options=None):
+    def __init__(self, parent, path, labels=None, rises=None, falls=None, valleys=None, latex_options=None):
 
         if latex_options is None:
             latex_options = {}
         if rises is None:
             rises = []
+        if falls is None:
+            falls = []
         if valleys is None:
             valleys = []
         self.path = path
         self.labels = labels
         self.rises = rises
+        self.falls = falls
         self.valleys = valleys
 
         # Total length, width, and height of the path.
@@ -241,8 +276,8 @@ class LatticePath(ClonableIntArray):
         # It's the slope, corrected to disregard the decorations.
         # self.slope = Rational(self.width / self.height)
         self.slope = 1 if self.width == self.height \
-            else Rational((self.width - len(self.rises) - len(self.valleys)) /
-                          (self.height - len(self.rises) - len(self.valleys)))
+            else Rational((self.width - len(self.rises) - len(self.falls) - len(self.valleys)) /
+                          (self.height - len(self.rises) - len(self.falls) - len(self.valleys)))
 
         # It's the disance between the main diagonal and the base diagonal.
         self.shift = - min(self.area_word()) if self.height > 0 else 0
@@ -261,6 +296,8 @@ class LatticePath(ClonableIntArray):
             representation += f', labels={self.labels}'
         if self.rises != []:
             representation += f', rises={self.rises}'
+        if self.falls != []:
+            representation += f', falls={self.falls}'
         if self.valleys != []:
             representation += f', valleys={self.valleys}'
         representation += ')'
@@ -373,7 +410,7 @@ class LatticePath(ClonableIntArray):
         collisions = [(i, j) for i in range(self.width+1) for j in range(self.height+1) if is_under(i, j)]
         collisions = sorted(collisions, key=lambda c: (self.rank(*c), c[1]), reverse=True)
 
-        level = 0
+        # level = 0
         word = []
 
         for c in collisions:
@@ -430,13 +467,13 @@ class LatticePath(ClonableIntArray):
         # Returns the x-coordinate of the i-th vertical step.
 
         return [list(self.cells()[i,:]).index(1) for i in range(self.height)]
-    
+
     @cached_method
     def rows(self):
         # Returns the y-coordinate of the i-th horizontal step.
 
         return [list(self.cells()[:,i]).index(0)-1 if 0 in list(self.cells()[:,i]) else self.height for i in range(self.width)]
-    
+
     @cached_method
     def main_diagonal(self):
         # Returns x-coordinates of the y-integer points of the main diagonal (not the base diagonal).
@@ -449,13 +486,13 @@ class LatticePath(ClonableIntArray):
             main_diagonal += [position]
 
         return main_diagonal
-    
+
     @cached_method
     def base_diagonal(self):
         # Returns x-coordinates of the y-integer points of the base diagonal.
 
         return [i+self.shift for i in self.main_diagonal()]
-    
+
     @cached_method
     def cells(self):
         # Returns the cells under the path.
@@ -471,7 +508,7 @@ class LatticePath(ClonableIntArray):
                     cells[y,j] = 1
                 y += 1
         return cells
-    
+
     def area_cells(self):
         area_cells = np.zeros((self.height, self.width))
 
@@ -481,10 +518,16 @@ class LatticePath(ClonableIntArray):
                     area_cells[i,j] = self.cells()[i,j]
 
         return area_cells
-    
+
+    def area_new(self):
+        return int(sum(sum(self.area_cells())))
+
     def area(self):
-        return sum(self.area_cells)
-    
+        if self.falls != []:
+            return LatticePath([1-x for x in self.path[::-1]], 
+                               rises = [self.width-x-1 for x in self.falls]).area()
+        return sum(floor(self.area_word()[x]) for x in range(self.height) if x not in self.rises) 
+
     def dinv_cells(self):
         dinv_cells = np.zeros((self.height, self.width))
 
@@ -495,9 +538,9 @@ class LatticePath(ClonableIntArray):
                     leg = i - self.rows()[j]
                     if (self.height*arm <= self.width*(leg+1) and self.width*leg < self.height*(arm+1)):
                         dinv_cells[i,j] = 1
-                    
+
         return dinv_cells
-    
+
     def attack_cells(self):
         attack_cells = np.zeros((self.height, self.height))
 
@@ -522,13 +565,6 @@ class LatticePath(ClonableIntArray):
         # Returns the (English) Ferrer diagram above the path, as partition.
         return Partition(self.columns()[::-1])
 
-    def area(self):
-        return sum(
-            floor(self.area_word()[i] + self.shift)
-            for i in range(self.height)
-            if i not in self.rises
-        )
-
     def dinv(self):
 
         if self.width != self.height:
@@ -537,7 +573,7 @@ class LatticePath(ClonableIntArray):
         dinv = 0  # Initializes dinv to 0.
 
         for i in range(self.height):  # Goes through the letters of the area word.
-            if self.area_word()[i] < 0 and (
+            if self.area_word()[i] < 0 and i in self.valleys and (
                 self.labels is None or self.labels[i] > 0
             ):
                 dinv += 1
@@ -556,7 +592,32 @@ class LatticePath(ClonableIntArray):
 
         return dinv
 
-    def _rectangular_dinv(self):
+    def horizontal_area_word(self):
+        x = 0
+        y = 0
+        stars = 0
+        haword = []
+
+        for i in self.path:
+            if i == 1:
+                if y in self.rises:
+                    stars += 1
+                y += 1
+            else:
+                x += 1
+                haword += [(y-stars)*self.slope - (x-stars)]
+
+        return haword[::-1]
+
+    def horizontal_dinv(self):
+        dinv = 0
+        for i in range(self.width):
+            for j in range(self.width):
+                if (self.horizontal_area_word()[i], i) < (self.horizontal_area_word()[j], j) < (self.horizontal_area_word()[i] + 1, i):
+                    dinv += 1
+        return dinv
+
+    def _rectangular_dinv_new(self):
         # Returns the dinv. If the path is labelled, it takes the labelling into account.
         # Currently works for any rectangular path with no decorated rises, and any square path.
         #! It does NOT work for any rectangular path with decorated rises.
@@ -565,10 +626,10 @@ class LatticePath(ClonableIntArray):
         max_dinv = 0
         for i in range(self.height):
             for j in range(self.height):
-                    if (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i in self.rises else self.slope), i):
-                        max_dinv += 1
-                        if (self.labels is None or self.labels[i] < self.labels[j]):
-                            temp_dinv += 1
+                if (self.area_word()[i], i) < (self.area_word()[j], j) < (self.area_word()[i] + (1 if i in self.rises else self.slope), i):
+                    max_dinv += 1
+                    if (self.labels is None or self.labels[i] < self.labels[j]):
+                        temp_dinv += 1
 
         bonus_dinv = 0
         area_coordinate = 0
@@ -580,11 +641,36 @@ class LatticePath(ClonableIntArray):
                 if area_coordinate < 0:
                     bonus_dinv += 1
 
-        ferrer_dinv = sum(self.dinv_cells())
+        ferrer_dinv = int(sum(sum(self.dinv_cells())))
 
         return temp_dinv - max_dinv + ferrer_dinv + bonus_dinv
     
-    def _rectangular_dinv_old(self):
+    def temp_dinv(self):
+        temp_dinv = sum(
+            len(
+                [
+                    j
+                    for j in range(self.height)
+                    if (
+                        (self.labels is None or self.labels[i] < self.labels[j])
+                        and (
+                            (self.area_word()[i], i)
+                            < (self.area_word()[j], j)
+                            < (
+                                self.area_word()[i]
+                                + (1 if i-1 in self.rises else self.slope),
+                                i,
+                            )
+                        )
+                    )
+                ]
+            )
+            for i in range(self.height)
+        )
+
+        return temp_dinv
+    
+    def _rectangular_dinv(self):
         # Returns the dinv. If the path is labelled, it takes the labelling into account.
         # Currently works for any rectangular path with no decorated rises, and any square path.
         #! It does not work for any rectangular path with decorated rises.
@@ -627,6 +713,92 @@ class LatticePath(ClonableIntArray):
                           and (self.labels is None or self.labels[i] > 0)])
         
         return temp_dinv + ferrer_dinv + bonus_dinv
+
+    def falls_dinv(self):
+
+        vertical_distances = [0]
+        x = 0
+        for direction in self.path[:-1]:
+            if direction == 1:
+                vertical_distances += [vertical_distances[-1] + 1]
+            else:
+                if x in self.falls:
+                    vertical_distances += [vertical_distances[-1] - 1]
+                else:
+                    vertical_distances += [vertical_distances[-1] - 1/self.slope]
+                x += 1
+
+        horizontal_step_to_step = []
+        vertical_step_to_step = []
+        for step, direction in enumerate(self.path):
+            if direction == 1:
+                vertical_step_to_step.append(step)
+            else:
+                horizontal_step_to_step.append(step)
+        
+        fall_label_to_step = {i+1 : step for (i, step) in enumerate(sorted(self.falls, key = lambda fall : (vertical_distances[horizontal_step_to_step[fall]], fall), reverse=True))}
+        step_to_fall_label = {step: label for label, step in fall_label_to_step.items()}
+        
+        horizontal_labels = []
+        fall_labels = list(sorted(step_to_fall_label.values()))
+        current_labels = fall_labels.copy()
+        for horizontal_step, step in enumerate(horizontal_step_to_step):
+            if horizontal_step in self.falls:
+                current_labels.remove(step_to_fall_label[horizontal_step])
+                horizontal_labels.append(None)
+            else:
+                horizontal_labels.append(current_labels)
+                current_labels = fall_labels.copy()
+
+        dinv_quadruples = []
+        for vertical_step in range(self.height):
+            dinv_quadruples.append(((0, self.labels[vertical_step]),
+                                     (vertical_distances[vertical_step_to_step[vertical_step]], vertical_step_to_step[vertical_step])))
+        
+        for horizontal_step, step_labels in enumerate(horizontal_labels):
+            if step_labels is not None:
+                for i, label in enumerate(step_labels):
+                    dinv_quadruples.append(((1, label), 
+                                            (vertical_distances[horizontal_step_to_step[horizontal_step]] 
+                                             + i + len(self.falls) - len(step_labels), horizontal_step_to_step[horizontal_step])))
+
+        tdinv = sum(1 for ((l1, d1), (l2, d2)) in product(dinv_quadruples,repeat=2) if 
+                    l1 < l2 and d1 < d2 < (d1[0]+1, d1[1]))
+        
+        cdinv = 0
+        for ((direction, label), (vertical_distance, step)) in dinv_quadruples:
+            for horizontal_step in range(self.width):
+                if horizontal_step_to_step[horizontal_step] >= step:
+                    break
+                if horizontal_step not in self.falls:
+                    other_vertical_distance = vertical_distances[horizontal_step_to_step[horizontal_step]] - 1/self.slope
+                    if other_vertical_distance <= vertical_distance < other_vertical_distance + 1/self.slope + len(self.falls) - 1:
+                        cdinv += 1
+
+        # print([((l1, d1), (l2, d2)) for ((l1, d1), (l2, d2)) in combinations(dinv_quadruples,2) if 
+        #             l1 < l2 and d1 < d2 < (d1[0]+1, d1[1])])
+        
+        # for ((l1, d1), (l2, d2)) in product(dinv_quadruples,repeat=2):
+        #     print(l1, d1, 'vs.', l2, d2)
+        #     if l1 < l2 and d1 < d2 < (d1[0]+1, d1[1]):
+        #         print('YES')
+
+
+        # print(
+        #     "\nhorizontal_labels: ", horizontal_labels,
+        #     "\nfall_labels: ", fall_labels,
+        #     "\nstep_to_fall_label: ", step_to_fall_label,
+        #     "\nfall_label_to_step: ", fall_label_to_step,
+        #     "\nvertical_distances: ", vertical_distances,
+        #     "\nhorizontal_step_to_step: ", horizontal_step_to_step,
+        #     "\nvertical_step_to_step: ", vertical_step_to_step,
+        #     "\ndinv_quadruples: ", dinv_quadruples,
+        #     "\ntdinv: ", tdinv,
+        #     "\ncdinv: ", cdinv,
+        # )
+
+
+        return tdinv - cdinv
 
     def zero(self):
         return 0
@@ -744,7 +916,7 @@ class LatticePath(ClonableIntArray):
             tikz += '    \\begin{scope}\n'
             tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
 
-            tikz += f'        \\draw[gray!60, thin] (0,0)'
+            tikz += '        \\draw[gray!60, thin] (0,0)'
 
             for i in range(self.height+1):
                 x = Rational(self.main_diagonal()[i] + self.shift)
@@ -768,6 +940,9 @@ class LatticePath(ClonableIntArray):
         rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
             [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
 
+        falls = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+            i + 0.5, [j - sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5) for i in self.falls)
+
         valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
             [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
 
@@ -782,7 +957,7 @@ class LatticePath(ClonableIntArray):
                 stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
             stats += '};\n'
 
-        return (tikz + labels + rises + valleys + stats + extra_stuff + '\\end{tikzpicture}')
+        return (tikz + labels + rises + falls + valleys + stats + extra_stuff + '\\end{tikzpicture}')
 
 
 class RectangularPath(LatticePath):
@@ -803,7 +978,7 @@ class RectangularDyckPath(RectangularPath):
 
     def check(self):
         if self.shift != 0:
-            raise ValueError(f'The path\'s shift is not 0')
+            raise ValueError('The path\'s shift is not 0')
 
 
 class SquarePath(RectangularPath):
@@ -843,8 +1018,12 @@ class SquarePath(RectangularPath):
 
 
 class DyckPath(SquarePath, RectangularDyckPath):
+    """
+    Represents a Dyck path, which is a type of lattice path that starts at the origin (0, 0),
+    ends at the point (n, n), and consists of steps (1, 1) and (1, -1) that never go below the x-axis.
+    """
 
-    @ staticmethod
+    @staticmethod
     def __classcall_private__(cls, *args, **kwargs):
         return cls._auto_parent._element_constructor_(*args, **kwargs)
 
@@ -852,7 +1031,9 @@ class DyckPath(SquarePath, RectangularDyckPath):
         pass
 
     def parking_word(self):
-        # Returns the parking word of the path, i.e. the word whose descent set of the inverse gives the pmaj.
+        """
+        Returns the parking word of the path, i.e. the word whose descent set of the inverse gives the pmaj.
+        """
         if self.labels is None:
             labels = [x+1 for x in range(self.length)]
         else:
@@ -870,7 +1051,7 @@ class DyckPath(SquarePath, RectangularDyckPath):
 
         for i in range(self.width):
             # We add the labels in the i-th column to the stack.
-            stack += Multiset([self.labels[j] for j in range(self.height) if adjusted_columns[j] == i])
+            stack += Multiset([labels[j] for j in range(self.height) if adjusted_columns[j] == i])
 
             while ((len(parking_word)+1)*self.width <= (i+1)*self.height):
                 # We add to the parking word as many labels as the slope permits.
@@ -890,7 +1071,10 @@ class DyckPath(SquarePath, RectangularDyckPath):
         return parking_word
 
     def dinv(self):
-
+        """
+        Calculates the dinv value of the Dyck path.
+        The dinv value is a measure of the number of inversions in the path.
+        """
         dinv = 0  # Initializes dinv to 0.
 
         # Goes through the letters of the area word.
@@ -909,13 +1093,17 @@ class DyckPath(SquarePath, RectangularDyckPath):
         return dinv
 
     def pmaj(self):
+        """
+        Calculates the pmaj value of the Dyck path.
+        The pmaj value is a measure of the number of descents in the parking word of the path.
+        """
         return sum(i for i in range(1, self.height) if self.parking_word()[-i] > self.parking_word()[-i-1])
 
 
 class LatticePathsFactory(SetFactory):
     Element = LatticePath
 
-    def __call__(self, width=None, height=None, shift=None, square=False, labelled=True, labels=None, decorated_rises=0, decorated_valleys=0, policy=None):
+    def __call__(self, width=None, height=None, shift=None, square=False, labelled=True, labels=None, decorated_rises=0, decorated_falls=0, decorated_valleys=0, policy=None):
 
         if policy is None:
             policy = self._default_policy
@@ -924,6 +1112,7 @@ class LatticePathsFactory(SetFactory):
             'labelled': labelled,
             'labels': None if labels is None else tuple(labels),
             'decorated_rises': decorated_rises,
+            'decorated_falls': decorated_falls,
             'decorated_valleys': decorated_valleys,
         }
 
@@ -950,13 +1139,12 @@ class LatticePathsFactory(SetFactory):
                     return SquarePaths_all(policy, **options)
                 else:
                     raise ValueError('Can only set shift to 0 if the size is not specified')
+            elif shift == 0:
+                return RectangularDyckPaths_all(policy, **options)
+            elif shift is None:
+                return RectangularPaths_all(policy, **options)
             else:
-                if shift == 0:
-                    return RectangularDyckPaths_all(policy, **options)
-                elif shift is None:
-                    return RectangularPaths_all(policy, **options)
-                else:
-                    raise ValueError('Can only set shift to 0 if the size is not specified')
+                raise ValueError('Can only set shift to 0 if the size is not specified')
         else:
             raise ValueError(f'Invalid size (={width})')
 
@@ -1158,8 +1346,10 @@ class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
         square = self._width == self._height
         adjusted_height = height
 
-        if 'decorated rises' in kwargs:
+        if 'decorated_rises' in kwargs:
             adjusted_height -= kwargs['decorated_rises']
+        if 'decorated_falls' in kwargs:
+            adjusted_height -= kwargs['decorated_falls']
         if 'decorated_valleys' in kwargs:
             adjusted_height -= kwargs['decorated_valleys']
 
