@@ -81,7 +81,7 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, falls=None, valleys=No
     The variables _level, _slope, _going_up, and _flag are internal.
     '''
 
-    if falls is not None:
+    if falls:
         _falls_flag = True
 
     if rises is None:
@@ -387,13 +387,13 @@ class LatticePath(ClonableIntArray):
             for labelling in _mu_labellings(composition, list(range(1, self.height+1))):
                 yield from self.multilabellings(n=n - 1, existing_labels=[existing_labels[i] + [labelling[i]] for i in range(self.height)])
 
-    def characteristic_function(self):
+    def characteristic_function(self, **kwargs):
         # Returns the characteristic function of the path, computed in terms of d+ d- operators.
 
         # if self.labels is not None or self.rises != [] or self.valleys != []:
         #     raise NotImplementedError('The characteristic function can only be computed for plain paths')
 
-        return characteristic_function(self)
+        return characteristic_function(self, **kwargs)
 
     def word(self):
 
@@ -466,6 +466,12 @@ class LatticePath(ClonableIntArray):
     def columns(self):
         # Returns the x-coordinate of the i-th vertical step.
 
+        import itertools
+        def get_nth_index(lst, item, n):
+            c = itertools.count()
+            return next(i for i, j in enumerate(lst) if j==item and next(c) == n-1)
+
+        return [(sum(1-x for x in self.path[:get_nth_index(self.path, 1, i+1)])) for i in range(self.height)]
         return [list(self.cells()[i,:]).index(1) for i in range(self.height)]
 
     @cached_method
@@ -523,10 +529,10 @@ class LatticePath(ClonableIntArray):
         return int(sum(sum(self.area_cells())))
 
     def area(self):
-        if self.falls != []:
+        if self.falls:
             return LatticePath([1-x for x in self.path[::-1]], 
                                rises = [self.width-x-1 for x in self.falls]).area()
-        return sum(floor(self.area_word()[x]) for x in range(self.height) if x not in self.rises) 
+        return sum(floor(self.area_word()[x] + self.shift) for x in range(self.height) if x not in self.rises) 
 
     def dinv_cells(self):
         dinv_cells = np.zeros((self.height, self.width))
@@ -714,7 +720,81 @@ class LatticePath(ClonableIntArray):
         
         return temp_dinv + ferrer_dinv + bonus_dinv
 
-    def falls_dinv(self):
+    #! This doesn't work.
+    def rise_dinv(self):
+
+        horizontal_distances = [0]
+        x = 0
+        for direction in self.path[:-1]:
+            if direction == 0:
+                horizontal_distances += [horizontal_distances[-1] - 1]
+            else:
+                if x in self.rises:
+                    horizontal_distances += [horizontal_distances[-1] + 1]
+                else:
+                    horizontal_distances += [horizontal_distances[-1] + self.slope]
+                x += 1
+
+        horizontal_step_to_step = []
+        vertical_step_to_step = []
+        for step, direction in enumerate(self.path):
+            if direction == 1:
+                vertical_step_to_step.append(step)
+            else:
+                horizontal_step_to_step.append(step)
+        
+        tdinv = sum(1 for i, j in product(range(self.height),repeat=2) if
+                    (self.labels is None or self.labels[i] < self.labels[j]) and
+                    (horizontal_distances[vertical_step_to_step[i]], i) < (horizontal_distances[vertical_step_to_step[j]], j)  < (horizontal_distances[vertical_step_to_step[i]] + (1 if i in self.rises else self.slope), i))
+
+        # Project topmost points of vertical steps onto decorated vertical steps above them.
+        vstar_cdinv = 0
+        for vstep in range(self.height):
+            for star_vstep in self.rises[::-1]:
+                if vstep >= star_vstep:
+                    break
+                if horizontal_distances[vertical_step_to_step[star_vstep]] < horizontal_distances[vertical_step_to_step[vstep]] + (1 if vstep in self.rises else self.slope) <= horizontal_distances[vertical_step_to_step[star_vstep]] + 1:
+                    vstar_cdinv += 1
+        #vstar_cdinv = 0
+
+        # # Project leftmost points of horizontal steps onto decorated vertical steps below them.
+        # hstar_cdinv = 0
+        # for hstep in range(self.width):
+        #     for star_step in self.rises:
+        #         if horizontal_step_to_step[hstep]-1 <= vertical_step_to_step[star_step]:
+        #             break
+        #         if horizontal_distances[vertical_step_to_step[star_step]] < horizontal_distances[horizontal_step_to_step[hstep]] <= horizontal_distances[vertical_step_to_step[star_step]] + 1:
+        #             hstar_cdinv += 1
+
+        # Project horizontal steps onto vertical steps, and check for strict containment.
+        hv_cdinv = 0
+        for hstep in range(self.width):
+            for vstep in range(self.height):
+                if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                    if vstep not in self.rises:
+                        bottom_endpoint = horizontal_distances[vertical_step_to_step[vstep]]
+                        top_endpoint = horizontal_distances[vertical_step_to_step[vstep]] + self.slope
+                    else:
+                        top_endpoint += 1
+                    if vstep == self.height-1 or vstep+1 not in self.rises:
+                        if bottom_endpoint < horizontal_distances[horizontal_step_to_step[hstep]] - 1 <= top_endpoint - 1:
+                            hv_cdinv += 1
+
+        #Project vertical (non-starred) steps onto horizontal steps, and check for strict containment.
+        vh_cdinv = 0
+        for vstep in range(self.height):
+            if vstep not in self.rises and (vstep == self.height-1 or vstep+1 not in self.rises):
+                for hstep in range(self.width):
+                    if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                        if horizontal_distances[horizontal_step_to_step[hstep]] - 1 <= horizontal_distances[vertical_step_to_step[vstep]] < horizontal_distances[horizontal_step_to_step[hstep]] - self.slope:
+                            vh_cdinv += 1
+
+        #print(f'tdinv = {tdinv}, vh_cdinv = {vh_cdinv}, hv_cdinv = {hv_cdinv}')
+
+        return tdinv + (hv_cdinv - vh_cdinv - vstar_cdinv)
+
+    #! This works!
+    def fall_dinv(self):
 
         vertical_distances = [0]
         x = 0
@@ -735,70 +815,111 @@ class LatticePath(ClonableIntArray):
                 vertical_step_to_step.append(step)
             else:
                 horizontal_step_to_step.append(step)
-        
-        fall_label_to_step = {i+1 : step for (i, step) in enumerate(sorted(self.falls, key = lambda fall : (vertical_distances[horizontal_step_to_step[fall]], fall), reverse=True))}
-        step_to_fall_label = {step: label for label, step in fall_label_to_step.items()}
-        
-        horizontal_labels = []
-        fall_labels = list(sorted(step_to_fall_label.values()))
-        current_labels = fall_labels.copy()
-        for horizontal_step, step in enumerate(horizontal_step_to_step):
-            if horizontal_step in self.falls:
-                current_labels.remove(step_to_fall_label[horizontal_step])
-                horizontal_labels.append(None)
-            else:
-                horizontal_labels.append(current_labels)
-                current_labels = fall_labels.copy()
 
-        dinv_quadruples = []
-        for vertical_step in range(self.height):
-            dinv_quadruples.append(((0, self.labels[vertical_step]),
-                                     (vertical_distances[vertical_step_to_step[vertical_step]], vertical_step_to_step[vertical_step])))
-        
-        for horizontal_step, step_labels in enumerate(horizontal_labels):
-            if step_labels is not None:
-                for i, label in enumerate(step_labels):
-                    dinv_quadruples.append(((1, label), 
-                                            (vertical_distances[horizontal_step_to_step[horizontal_step]] 
-                                             + i + len(self.falls) - len(step_labels), horizontal_step_to_step[horizontal_step])))
+        tdinv = sum(1 for i, j in product(range(self.height),repeat=2) if 
+                    (self.labels is None or self.labels[i] < self.labels[j]) and
+                    (vertical_distances[vertical_step_to_step[i]], i) < (vertical_distances[vertical_step_to_step[j]], j)  < (vertical_distances[vertical_step_to_step[i]]+1, i))
 
-        tdinv = sum(1 for ((l1, d1), (l2, d2)) in product(dinv_quadruples,repeat=2) if 
-                    l1 < l2 and d1 < d2 < (d1[0]+1, d1[1]))
-        
-        cdinv = 0
-        for ((direction, label), (vertical_distance, step)) in dinv_quadruples:
-            for horizontal_step in range(self.width):
-                if horizontal_step_to_step[horizontal_step] >= step:
+        # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
+        hstar_cdinv = 0
+        for hstep in range(self.width):
+            for star_hstep in self.falls:
+                if hstep-1 <= star_hstep:
                     break
-                if horizontal_step not in self.falls:
-                    other_vertical_distance = vertical_distances[horizontal_step_to_step[horizontal_step]] - 1/self.slope
-                    if other_vertical_distance <= vertical_distance < other_vertical_distance + 1/self.slope + len(self.falls) - 1:
-                        cdinv += 1
+                if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
+                    hstar_cdinv += 1
 
-        # print([((l1, d1), (l2, d2)) for ((l1, d1), (l2, d2)) in combinations(dinv_quadruples,2) if 
-        #             l1 < l2 and d1 < d2 < (d1[0]+1, d1[1])])
+        # Project vertical steps onto horizontal steps, and check for strict containment.
+        vh_cdinv = 0
+        for vstep in range(self.height):
+            for hstep in range(self.width)[::-1]:
+                if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                    if hstep not in self.falls:
+                        right_endpoint = vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope
+                        left_endpoint = vertical_distances[horizontal_step_to_step[hstep]]
+                    else:
+                        left_endpoint += 1
+                    if hstep == 0 or hstep-1 not in self.falls:
+                        if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
+                            vh_cdinv += 1
+
+        #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
+        hv_cdinv = 0
+        for hstep in range(self.width):
+            if hstep not in self.falls and (hstep == 0 or hstep-1 not in self.falls):
+                for vstep in range(self.height):
+                    if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                        if vertical_distances[vertical_step_to_step[vstep]] +  1/self.slope < vertical_distances[horizontal_step_to_step[hstep]] <= vertical_distances[vertical_step_to_step[vstep]] + 1:
+                            hv_cdinv += 1
+
+        bonus_dinv = len([vstep for vstep in range(self.height) if vertical_distances[vertical_step_to_step[vstep]] < 0
+                          and (self.labels is None or self.labels[vstep] > 0)])
+
+        return tdinv - vh_cdinv + hv_cdinv + hstar_cdinv + bonus_dinv
+
+    # #! This works!
+    # def working_dinv(self):
+
+    #     vertical_distances = [0]
+    #     x = 0
+    #     for direction in self.path[:-1]:
+    #         if direction == 1:
+    #             vertical_distances += [vertical_distances[-1] + 1]
+    #         else:
+    #             if x in self.falls:
+    #                 vertical_distances += [vertical_distances[-1] - 1]
+    #             else:
+    #                 vertical_distances += [vertical_distances[-1] - 1/self.slope]
+    #             x += 1
+
+    #     horizontal_step_to_step = []
+    #     vertical_step_to_step = []
+    #     for step, direction in enumerate(self.path):
+    #         if direction == 1:
+    #             vertical_step_to_step.append(step)
+    #         else:
+    #             horizontal_step_to_step.append(step)
         
-        # for ((l1, d1), (l2, d2)) in product(dinv_quadruples,repeat=2):
-        #     print(l1, d1, 'vs.', l2, d2)
-        #     if l1 < l2 and d1 < d2 < (d1[0]+1, d1[1]):
-        #         print('YES')
+    #     fall_label_to_step = {i+1 : step for (i, step) in enumerate(sorted(self.falls, key = lambda fall : (vertical_distances[horizontal_step_to_step[fall]], fall), reverse=True))}
+    #     step_to_fall_label = {step: label for label, step in fall_label_to_step.items()}
+        
+    #     horizontal_labels = []
+    #     fall_labels = list(sorted(step_to_fall_label.values()))
+    #     current_labels = fall_labels.copy()
+    #     for horizontal_step, step in enumerate(horizontal_step_to_step):
+    #         if horizontal_step in self.falls:
+    #             current_labels.remove(step_to_fall_label[horizontal_step])
+    #             horizontal_labels.append(None)
+    #         else:
+    #             horizontal_labels.append(current_labels)
+    #             current_labels = fall_labels.copy()
 
+    #     dinv_quadruples = []
+    #     for vertical_step in range(self.height):
+    #         dinv_quadruples.append(((0, self.labels[vertical_step]),
+    #                                 (vertical_distances[vertical_step_to_step[vertical_step]], vertical_step_to_step[vertical_step])))
+        
+    #     for horizontal_step, step_labels in enumerate(horizontal_labels):
+    #         if step_labels is not None:
+    #             for i, label in enumerate(step_labels):
+    #                 dinv_quadruples.append(((1, label), 
+    #                                         (vertical_distances[horizontal_step_to_step[horizontal_step]] 
+    #                                         + i + len(self.falls) - len(step_labels), horizontal_step_to_step[horizontal_step])))
 
-        # print(
-        #     "\nhorizontal_labels: ", horizontal_labels,
-        #     "\nfall_labels: ", fall_labels,
-        #     "\nstep_to_fall_label: ", step_to_fall_label,
-        #     "\nfall_label_to_step: ", fall_label_to_step,
-        #     "\nvertical_distances: ", vertical_distances,
-        #     "\nhorizontal_step_to_step: ", horizontal_step_to_step,
-        #     "\nvertical_step_to_step: ", vertical_step_to_step,
-        #     "\ndinv_quadruples: ", dinv_quadruples,
-        #     "\ntdinv: ", tdinv,
-        #     "\ncdinv: ", cdinv,
-        # )
+    #     tdinv = sum(1 for ((l1, d1), (l2, d2)) in product(dinv_quadruples,repeat=2) if 
+    #                 l1 < l2 and d1 < d2 < (d1[0]+1, d1[1]))
+        
+    #     cdinv = 0
+    #     for ((_, _), (vertical_distance, step)) in dinv_quadruples:
+    #         for horizontal_step in range(self.width):
+    #             if horizontal_step_to_step[horizontal_step] >= step:
+    #                 break
+    #             if horizontal_step not in self.falls:
+    #                 other_vertical_distance = vertical_distances[horizontal_step_to_step[horizontal_step]]
+    #                 if other_vertical_distance - 1/self.slope <= vertical_distance < other_vertical_distance + len(self.falls) - 1:
+    #                     cdinv += 1
 
-
-        return tdinv - cdinv
+    #     return tdinv - cdinv
 
     def zero(self):
         return 0
@@ -860,104 +981,147 @@ class LatticePath(ClonableIntArray):
         if read == 'diagonal':
             # Reading word according to the dinv statistic,
             # i.e. along diagonals, left to right, bottom to top.
+            # return [self.labels[i] for i in sorted(list(range(self.height)),
+                                                #    key=lambda i: (self.area_word()[i], i))]
+            horizontal_distances = [0]
+            x = 0
+            for direction in self.path:
+                if direction == 0:
+                    horizontal_distances += [horizontal_distances[-1] - 1]
+                else:
+                    if x in self.rises:
+                        horizontal_distances += [horizontal_distances[-1] + 1]
+                    else:
+                        horizontal_distances += [horizontal_distances[-1] + self.slope]
+                    x += 1
+            
+            vertical_step_to_step = []
+            for step, direction in enumerate(self.path):
+                if direction == 1:
+                    vertical_step_to_step.append(step)
+            
+            # Reading word according to the pmaj statistic, i.e. along columns, bottom to top.
             return [self.labels[i] for i in sorted(list(range(self.height)),
-                                                   key=lambda i: (self.area_word()[i], i))]
+                                                   key=lambda i: (horizontal_distances[vertical_step_to_step[i]], i))]
+        
         elif read == 'vertical':
             # Reading word according to the pmaj statistic, i.e. along columns, bottom to top.
             return self.labels
+        
+        elif read == 'vertical_distance':
+            vertical_distances = [0]
+            x = 0
+            for direction in self.path[:-1]:
+                if direction == 1:
+                    vertical_distances += [vertical_distances[-1] + 1]
+                else:
+                    if x in self.falls:
+                        vertical_distances += [vertical_distances[-1] - 1]
+                    else:
+                        vertical_distances += [vertical_distances[-1] - 1/self.slope]
+                    x += 1
+            
+            vertical_step_to_step = []
+            for step, direction in enumerate(self.path):
+                if direction == 1:
+                    vertical_step_to_step.append(step)
+            
+            # Reading word according to the pmaj statistic, i.e. along columns, bottom to top.
+            return [self.labels[i] for i in sorted(list(range(self.height)),
+                                                   key=lambda i: (vertical_distances[vertical_step_to_step[i]], i))]
         else:
             raise ValueError('Reading order not recognised')
 
     def gessel(self, read=None):
-        ls = Permutation([i for i in self.reading_word(read)[::-1] if i > 0], check_input=True)
+        ls = Permutation([i for i in self.reading_word(read)[::-1] if i > 0], check=True)
         return Composition(from_subset=(ls.idescents(), len(ls)))
 
-    def set_latex_options(self, options):
-        for option in options:
-            self._latex_options[option] = options[option]
+    # def set_latex_options(self, options):
+    #     for option in options:
+    #         self._latex_options[option] = options[option]
 
-    def latex_options(self):
+    # def latex_options(self):
 
-        path_latex_options = self._latex_options.copy()
-        if 'bounce path' not in path_latex_options:
-            path_latex_options['bounce path'] = self.parent().options.latex_bounce_path
-        if 'color' not in path_latex_options:
-            path_latex_options['color'] = self.parent().options.latex_color
-        if 'diagonal' not in path_latex_options:
-            path_latex_options['diagonal'] = self.parent().options.latex_diagonal
-        if 'tikz_scale' not in path_latex_options:
-            path_latex_options['tikz_scale'] = self.parent().options.latex_tikz_scale
-        if 'line width' not in path_latex_options:
-            path_latex_options['line width'] = self.parent().options.latex_line_width * \
-                path_latex_options['tikz_scale']
-        if 'show_stats' not in path_latex_options:
-            path_latex_options['show_stats'] = self.parent().options.latex_show_stats
-        if 'qstat' not in path_latex_options:
-            path_latex_options['qstat'] = self.parent().options.latex_qstat
-        if 'tstat' not in path_latex_options:
-            path_latex_options['tstat'] = self.parent().options.latex_tstat
-        return path_latex_options
+    #     path_latex_options = self._latex_options.copy()
+    #     if 'bounce path' not in path_latex_options:
+    #         path_latex_options['bounce path'] = self.parent().options.latex_bounce_path
+    #     if 'color' not in path_latex_options:
+    #         path_latex_options['color'] = self.parent().options.latex_color
+    #     if 'diagonal' not in path_latex_options:
+    #         path_latex_options['diagonal'] = self.parent().options.latex_diagonal
+    #     if 'tikz_scale' not in path_latex_options:
+    #         path_latex_options['tikz_scale'] = self.parent().options.latex_tikz_scale
+    #     if 'line width' not in path_latex_options:
+    #         path_latex_options['line width'] = self.parent().options.latex_line_width * \
+    #             path_latex_options['tikz_scale']
+    #     if 'show_stats' not in path_latex_options:
+    #         path_latex_options['show_stats'] = self.parent().options.latex_show_stats
+    #     if 'qstat' not in path_latex_options:
+    #         path_latex_options['qstat'] = self.parent().options.latex_qstat
+    #     # if 'tstat' not in path_latex_options:
+    #     #     path_latex_options['tstat'] = self.parent().options.latex_tstat
+    #     return path_latex_options
 
-    def _latex_(self):
+    # def _latex_(self):
 
-        latex.add_package_to_preamble_if_available('tikz')
-        latex_options = self.latex_options()
-        color = latex_options['color']
-        line_width = latex_options['line width']
-        scale = latex_options['tikz_scale']
-        extra_stuff = ''  # latex_options['extra stuff']
+    #     latex.add_package_to_preamble_if_available('tikz')
+    #     latex_options = self.latex_options()
+    #     color = latex_options['color']
+    #     line_width = latex_options['line width']
+    #     scale = latex_options['tikz_scale']
+    #     extra_stuff = ''  # latex_options['extra stuff']
 
-        tikz = '\n'
-        tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
-        tikz += f'    \\draw[draw=none, use as bounding box] (-1,-1) rectangle ({self.width+1},{self.height+1});\n'
-        tikz += f'    \\draw[step=1.0, gray!60, thin] (0,0) grid ({self.width},{self.height});\n\n'
+    #     tikz = '\n'
+    #     tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
+    #     tikz += f'    \\draw[draw=none, use as bounding box] (-1,-1) rectangle ({self.width+1},{self.height+1});\n'
+    #     tikz += f'    \\draw[step=1.0, gray!60, thin] (0,0) grid ({self.width},{self.height});\n\n'
 
-        if latex_options['diagonal'] == True:
-            tikz += '    \\begin{scope}\n'
-            tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
+    #     if latex_options['diagonal'] == True:
+    #         tikz += '    \\begin{scope}\n'
+    #         tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
 
-            tikz += '        \\draw[gray!60, thin] (0,0)'
+    #         tikz += '        \\draw[gray!60, thin] (0,0)'
 
-            for i in range(self.height+1):
-                x = Rational(self.main_diagonal()[i] + self.shift)
-                tikz += f' -- ({x.numerator()}/{x.denominator()}, {i})'
+    #         for i in range(self.height+1):
+    #             x = Rational(self.main_diagonal()[i] + self.shift)
+    #             tikz += f' -- ({x.numerator()}/{x.denominator()}, {i})'
 
-            tikz += ';\n'
-            tikz += '    \\end{scope}\n\n'
+    #         tikz += ';\n'
+    #         tikz += '    \\end{scope}\n\n'
 
-        tikz += f'    \\draw[{color}, line width={line_width}pt] (0,0)'
-        labels = ''
+    #     tikz += f'    \\draw[{color}, line width={line_width}pt] (0,0)'
+    #     labels = ''
 
-        x = y = 0
-        for i in self.path:
-            if i == 1 and self.labels is not None:
-                labels += f'    \\draw ({x+0.5:.1f},{y+0.5:.1f}) circle (0.4cm) node {{${self.labels[y]}$}};\n'
-            x += 1 - i
-            y += i
-            tikz += f' -- ({x},{y})'
-        tikz += ';\n\n'
+    #     x = y = 0
+    #     for i in self.path:
+    #         if i == 1 and self.labels is not None:
+    #             labels += f'    \\draw ({x+0.5:.1f},{y+0.5:.1f}) circle (0.4cm) node {{${self.labels[y]}$}};\n'
+    #         x += 1 - i
+    #         y += i
+    #         tikz += f' -- ({x},{y})'
+    #     tikz += ';\n\n'
 
-        rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
-            [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
+    #     rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+    #         [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
 
-        falls = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
-            i + 0.5, [j - sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5) for i in self.falls)
+    #     falls = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+    #         i + 0.5, [j - sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5) for i in self.falls)
 
-        valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
-            [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
+    #     valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
+    #         [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
 
-        stats = '\n'
+    #     stats = '\n'
 
-        if latex_options['show_stats'] == True:
+    #     if latex_options['show_stats'] == True:
 
-            stats += '      \\node[below left] at (%d,0) {' % (self.width)
-            colors = ['blue', 'red', 'green']
+    #         stats += '      \\node[below left] at (%d,0) {' % (self.width)
+    #         colors = ['blue', 'red', 'green']
 
-            for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
-                stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
-            stats += '};\n'
+    #         for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
+    #             stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
+    #         stats += '};\n'
 
-        return (tikz + labels + rises + falls + valleys + stats + extra_stuff + '\\end{tikzpicture}')
+    #     return (tikz + labels + rises + falls + valleys + stats + extra_stuff + '\\end{tikzpicture}')
 
 
 class RectangularPath(LatticePath):
@@ -1222,44 +1386,44 @@ class RectangularPaths_all(ParentWithSetFactory, DisjointUnionEnumeratedSets):
     def check_element(self, element, check=True):
         return True
 
-    # add options to class
-    class options(GlobalOptions):
-        r'''
-        Set and display the options for Lattice Paths. If no parameters
-        are set, then the function returns a copy of the options dictionary.
+    # # add options to class
+    # class options(GlobalOptions):
+    #     r'''
+    #     Set and display the options for Lattice Paths. If no parameters
+    #     are set, then the function returns a copy of the options dictionary.
 
-        The ``options`` to Lattice Paths can be accessed as the method
-        :meth:`LatticePaths.options` of :class:`LatticePaths` and
-        related parent classes.
-        '''
+    #     The ``options`` to Lattice Paths can be accessed as the method
+    #     :meth:`LatticePaths.options` of :class:`LatticePaths` and
+    #     related parent classes.
+    #     '''
 
-        NAME = 'LatticePaths'
-        module = 'shuffle_theorem'
-        latex_tikz_scale = dict(default=1,
-                                description='The default value for the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_diagonal = dict(default=True,
-                              description='The default value for displaying the diagonal when latexed.',
-                              checker=lambda x: isinstance(x, bool))
-        latex_line_width = dict(default=2,
-                                description='The default value for the line width as a '
-                                'multiple of the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_color = dict(default='blue!60',
-                           description='The default value for the color when latexed.',
-                           checker=lambda x: isinstance(x, str))
-        latex_bounce_path = dict(default=False,
-                                 description='The default value for displaying the bounce path when latexed.',
-                                 checker=lambda x: isinstance(x, bool))
-        latex_show_stats = dict(default=True,
-                                description='The default value for displaying the statistics when latexed.',
-                                checker=lambda x: isinstance(x, bool))
-        latex_qstat = dict(default='qstat',
-                           description='The default statistics will depend on the class.',
-                           checker=lambda x: isinstance(x, str))
-        latex_tstat = dict(default='tstat',
-                           description='The default statistics will depend on the class.',
-                           checker=lambda x: isinstance(x, str))
+    #     NAME = 'LatticePaths'
+    #     module = 'shuffle_theorem'
+    #     # latex_tikz_scale = dict(default=1,
+    #     #                         description='The default value for the tikz scale when latexed.',
+    #     #                         checker=lambda x: True)  # More trouble than it's worth to check
+    #     # latex_diagonal = dict(default=True,
+    #     #                       description='The default value for displaying the diagonal when latexed.',
+    #     #                       checker=lambda x: isinstance(x, bool))
+    #     # latex_line_width = dict(default=2,
+    #     #                         description='The default value for the line width as a '
+    #     #                         'multiple of the tikz scale when latexed.',
+    #     #                         checker=lambda x: True)  # More trouble than it's worth to check
+    #     # latex_color = dict(default='blue!60',
+    #     #                    description='The default value for the color when latexed.',
+    #     #                    checker=lambda x: isinstance(x, str))
+    #     # latex_bounce_path = dict(default=False,
+    #     #                          description='The default value for displaying the bounce path when latexed.',
+    #     #                          checker=lambda x: isinstance(x, bool))
+    #     # latex_show_stats = dict(default=True,
+    #     #                         description='The default value for displaying the statistics when latexed.',
+    #     #                         checker=lambda x: isinstance(x, bool))
+    #     # latex_qstat = dict(default='qstat',
+    #     #                    description='The default statistics will depend on the class.',
+    #     #                    checker=lambda x: isinstance(x, str))
+    #     # latex_tstat = dict(default='tstat',
+    #     #                    description='The default statistics will depend on the class.',
+    #     #                    checker=lambda x: isinstance(x, str))
 
 
 class RectangularDyckPaths_all(RectangularPaths_all):
@@ -1344,21 +1508,23 @@ class RectangularPaths_size(ParentWithSetFactory, DisjointUnionEnumeratedSets):
         self._kwargs = kwargs
 
         square = self._width == self._height
-        adjusted_height = height
+        size = width
+        adjusted_size = height
 
         if 'decorated_rises' in kwargs:
-            adjusted_height -= kwargs['decorated_rises']
-        if 'decorated_falls' in kwargs:
-            adjusted_height -= kwargs['decorated_falls']
+            adjusted_size -= kwargs['decorated_rises']
+        if 'decorated_falls' in kwargs and kwargs['decorated_falls']:
+            size = height
+            adjusted_size = width - kwargs['decorated_falls']
         if 'decorated_valleys' in kwargs:
-            adjusted_height -= kwargs['decorated_valleys']
+            adjusted_size -= kwargs['decorated_valleys']
 
         ParentWithSetFactory.__init__(
             self, _format_constraints(((), {**kwargs, 'height': height, 'width': width, 'square': square})), policy, category=FiniteEnumeratedSets()
         )
         DisjointUnionEnumeratedSets.__init__(
             self, Family(
-                [Rational(i/adjusted_height) for i in range((width-1)*adjusted_height+1)],
+                [Rational(i/adjusted_size) for i in range(size*adjusted_size+1)],
                 lambda shift: _paths_size_shift(self.facade_policy(), width, height, shift, **kwargs)
             ),
             facade=True, keepkey=False, category=self.category()
@@ -1444,43 +1610,43 @@ class RectangularPaths_size_shift(ParentWithSetFactory, UniqueRepresentation):
             yield self.element_class(self, *x)
 
     # add options to class
-    class options(GlobalOptions):
-        r'''
-        Set and display the options for Lattice Paths. If no parameters
-        are set, then the function returns a copy of the options dictionary.
+    # class options(GlobalOptions):
+    #     r'''
+    #     Set and display the options for Lattice Paths. If no parameters
+    #     are set, then the function returns a copy of the options dictionary.
 
-        The ``options`` to Lattice Paths can be accessed as the method
-        :meth:`LatticePaths.options` of :class:`LatticePaths` and
-        related parent classes.
-        '''
+    #     The ``options`` to Lattice Paths can be accessed as the method
+    #     :meth:`LatticePaths.options` of :class:`LatticePaths` and
+    #     related parent classes.
+    #     '''
 
-        NAME = 'LatticePaths'
-        module = 'shuffle_theorem'
-        latex_tikz_scale = dict(default=1,
-                                description='The default value for the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_diagonal = dict(default=True,
-                              description='The default value for displaying the diagonal when latexed.',
-                              checker=lambda x: isinstance(x, bool))
-        latex_line_width = dict(default=2,
-                                description='The default value for the line width as a '
-                                'multiple of the tikz scale when latexed.',
-                                checker=lambda x: True)  # More trouble than it's worth to check
-        latex_color = dict(default='blue!60',
-                           description='The default value for the color when latexed.',
-                           checker=lambda x: isinstance(x, str))
-        latex_bounce_path = dict(default=False,
-                                 description='The default value for displaying the bounce path when latexed.',
-                                 checker=lambda x: isinstance(x, bool))
-        latex_show_stats = dict(default=True,
-                                description='The default value for displaying the statistics when latexed.',
-                                checker=lambda x: isinstance(x, bool))
-        latex_qstat = dict(default='qstat',
-                           description='The default statistics will depend on the class.',
-                           checker=lambda x: isinstance(x, str))
-        latex_tstat = dict(default='tstat',
-                           description='The default statistics will depend on the class.',
-                           checker=lambda x: isinstance(x, str))
+    #     NAME = 'LatticePaths'
+    #     module = 'shuffle_theorem'
+    #     # latex_tikz_scale = dict(default=1,
+    #     #                         description='The default value for the tikz scale when latexed.',
+    #     #                         checker=lambda x: True)  # More trouble than it's worth to check
+    #     # latex_diagonal = dict(default=True,
+    #     #                       description='The default value for displaying the diagonal when latexed.',
+    #     #                       checker=lambda x: isinstance(x, bool))
+    #     # latex_line_width = dict(default=2,
+    #     #                         description='The default value for the line width as a '
+    #     #                         'multiple of the tikz scale when latexed.',
+    #     #                         checker=lambda x: True)  # More trouble than it's worth to check
+    #     # latex_color = dict(default='blue!60',
+    #     #                    description='The default value for the color when latexed.',
+    #     #                    checker=lambda x: isinstance(x, str))
+    #     # latex_bounce_path = dict(default=False,
+    #     #                          description='The default value for displaying the bounce path when latexed.',
+    #     #                          checker=lambda x: isinstance(x, bool))
+    #     # latex_show_stats = dict(default=True,
+    #     #                         description='The default value for displaying the statistics when latexed.',
+    #     #                         checker=lambda x: isinstance(x, bool))
+    #     # latex_qstat = dict(default='qstat',
+    #     #                    description='The default statistics will depend on the class.',
+    #     #                    checker=lambda x: isinstance(x, str))
+    #     # latex_tstat = dict(default='tstat',
+    #     #                    description='The default statistics will depend on the class.',
+    #     #                    checker=lambda x: isinstance(x, str))
 
 
 class RectangularDyckPaths_size(RectangularPaths_size_shift):

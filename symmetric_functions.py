@@ -48,6 +48,9 @@ QSymqt.inject_shorthands(verbose=False)
 def qt(items, qstat='qstat', tstat='tstat', x=False, read=None):
     # Computes the q,t-polynomial associated to any set, a q-statistic, and a t-statistic.
 
+    if not items:
+        return 0
+
     if x is False:
         return sum(q**getattr(s, qstat)() * t**getattr(s, tstat)() for s in items)
 
@@ -60,7 +63,7 @@ def qtxy(items, qstat='qstat', tstat='tstat'):
     return sum(q ** getattr(s, qstat)() * t ** getattr(s, tstat)() * tensor([QSymqt.Fundamental()(s.gessel('diagonal')), QSymqt.Fundamental()(s.gessel('vertical'))]) for s in items)
 
 
-def characteristic_function(path):
+def characteristic_function(path, area=True):
 
     # if not (path.labels == None and path.rises == [] and path.valleys == []):
 
@@ -110,7 +113,9 @@ def characteristic_function(path):
         else:
             raise ValueError('Something went wrong here.')
 
-    f *= t**path.area()
+    if area:
+        f *= t**path.area()
+
     return Symqt.schur()(f)
 
 
