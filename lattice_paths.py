@@ -820,28 +820,50 @@ class LatticePath(ClonableIntArray):
                     (self.labels is None or self.labels[i] < self.labels[j]) and
                     (vertical_distances[vertical_step_to_step[i]], i) < (vertical_distances[vertical_step_to_step[j]], j)  < (vertical_distances[vertical_step_to_step[i]]+1, i))
 
+        #! This is the one that works.
+        # # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
+        # hstar_cdinv = 0
+        # for hstep in range(self.width):
+        #     for star_hstep in self.falls:
+        #         if hstep-1 <= star_hstep:
+        #             break
+        #         if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
+        #             hstar_cdinv += 1
+
+        #! This is the one that works.
+        # # Project vertical steps onto horizontal steps, and check for strict containment.
+        # vh_cdinv = 0
+        # for vstep in range(self.height):
+        #     for hstep in range(self.width)[::-1]:
+        #         if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+        #             if hstep not in self.falls:
+        #                 right_endpoint = vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope
+        #                 left_endpoint = vertical_distances[horizontal_step_to_step[hstep]]
+        #             else:
+        #                 left_endpoint += 1
+        #             if hstep == 0 or hstep-1 not in self.falls:
+        #                 if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
+        #                     vh_cdinv += 1
+
         # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
         hstar_cdinv = 0
-        for hstep in range(self.width):
-            for star_hstep in self.falls:
-                if hstep-1 <= star_hstep:
-                    break
-                if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
-                    hstar_cdinv += 1
+        for star_hstep in self.falls:
+            for hstep in range(star_hstep+1, self.width):
+                if hstep not in self.falls:
+                    if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= \
+                        vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope < \
+                        vertical_distances[horizontal_step_to_step[star_hstep]] - 1/self.slope:
+                        hstar_cdinv += 1
 
         # Project vertical steps onto horizontal steps, and check for strict containment.
         vh_cdinv = 0
         for vstep in range(self.height):
-            for hstep in range(self.width)[::-1]:
-                if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
-                    if hstep not in self.falls:
-                        right_endpoint = vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope
-                        left_endpoint = vertical_distances[horizontal_step_to_step[hstep]]
-                    else:
-                        left_endpoint += 1
-                    if hstep == 0 or hstep-1 not in self.falls:
-                        if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
-                            vh_cdinv += 1
+            for hstep in range(self.width):
+                if hstep not in self.falls and horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                    if vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope <= \
+                    vertical_distances[vertical_step_to_step[vstep]] < \
+                    vertical_distances[horizontal_step_to_step[hstep]] - 1:
+                        vh_cdinv += 1
 
         #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
         hv_cdinv = 0
