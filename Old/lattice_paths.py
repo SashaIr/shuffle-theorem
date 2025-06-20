@@ -252,10 +252,8 @@ class LatticePath(ClonableIntArray):
     def _auto_parent(cls):
         return RectangularPaths_all(SelfParentPolicy(LatticePaths, cls))
 
-    def __init__(self, parent, path, labels=None, rises=None, falls=None, valleys=None, latex_options=None):
+    def __init__(self, parent, path, labels=None, rises=None, falls=None, valleys=None):
 
-        if latex_options is None:
-            latex_options = {}
         if rises is None:
             rises = []
         if falls is None:
@@ -281,8 +279,6 @@ class LatticePath(ClonableIntArray):
 
         # It's the disance between the main diagonal and the base diagonal.
         self.shift = - min(self.area_word()) if self.height > 0 else 0
-        # Instruction on how to draw the path in LaTeX.
-        self._latex_options = dict(latex_options)
 
         ClonableIntArray.__init__(self, parent, path)
 
@@ -820,36 +816,71 @@ class LatticePath(ClonableIntArray):
                     (self.labels is None or self.labels[i] < self.labels[j]) and
                     (vertical_distances[vertical_step_to_step[i]], i) < (vertical_distances[vertical_step_to_step[j]], j)  < (vertical_distances[vertical_step_to_step[i]]+1, i))
 
+        #! This is the one that works.
+        # # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
+        # hstar_cdinv = 0
+        # for hstep in range(self.width):
+        #     for star_hstep in self.falls:
+        #         if hstep-1 <= star_hstep:
+        #             break
+        #         if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
+        #             hstar_cdinv += 1
+
+        #! This is the one that works.
+        # # Project vertical steps onto horizontal steps, and check for strict containment.
+        # vh_cdinv = 0
+        # for vstep in range(self.height):
+        #     for hstep in range(self.width)[::-1]:
+        #         if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+        #             if hstep not in self.falls:
+        #                 right_endpoint = vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope
+        #                 left_endpoint = vertical_distances[horizontal_step_to_step[hstep]]
+        #             else:
+        #                 left_endpoint += 1
+        #             if hstep == 0 or hstep-1 not in self.falls:
+        #                 if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
+        #                     vh_cdinv += 1
+
+        # #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
+        # hv_cdinv = 0
+        # for hstep in range(self.width):
+        #     if hstep not in self.falls and (hstep == 0 or hstep-1 not in self.falls):
+        #         for vstep in range(self.height):
+        #             if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+        #                 if vertical_distances[vertical_step_to_step[vstep]] +  1/self.slope < vertical_distances[horizontal_step_to_step[hstep]] <= vertical_distances[vertical_step_to_step[vstep]] + 1:
+        #                     print(f'+1 hv {vstep, hstep}')
+        #                     hv_cdinv += 1
+
         # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
         hstar_cdinv = 0
-        for hstep in range(self.width):
-            for star_hstep in self.falls:
-                if hstep-1 <= star_hstep:
-                    break
-                if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
-                    hstar_cdinv += 1
+        for star_hstep in self.falls:
+            for hstep in range(star_hstep+1, self.width):
+                if hstep not in self.falls:
+                    if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= \
+                        vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope < \
+                        vertical_distances[horizontal_step_to_step[star_hstep]] - 1/self.slope:
+                        # print(f'+1 hstar {star_hstep, hstep}')
+                        hstar_cdinv += 1
 
         # Project vertical steps onto horizontal steps, and check for strict containment.
         vh_cdinv = 0
         for vstep in range(self.height):
-            for hstep in range(self.width)[::-1]:
-                if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
-                    if hstep not in self.falls:
-                        right_endpoint = vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope
-                        left_endpoint = vertical_distances[horizontal_step_to_step[hstep]]
-                    else:
-                        left_endpoint += 1
-                    if hstep == 0 or hstep-1 not in self.falls:
-                        if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
-                            vh_cdinv += 1
+            for hstep in range(self.width):
+                if hstep not in self.falls and horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+                    if vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope <= \
+                    vertical_distances[vertical_step_to_step[vstep]] < \
+                    vertical_distances[horizontal_step_to_step[hstep]] - 1:
+                        # print(f'-1 vh {vstep, hstep}')
+                        vh_cdinv += 1
 
         #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
         hv_cdinv = 0
         for hstep in range(self.width):
-            if hstep not in self.falls and (hstep == 0 or hstep-1 not in self.falls):
+            if hstep not in self.falls:
                 for vstep in range(self.height):
                     if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
                         if vertical_distances[vertical_step_to_step[vstep]] +  1/self.slope < vertical_distances[horizontal_step_to_step[hstep]] <= vertical_distances[vertical_step_to_step[vstep]] + 1:
+                            # print(f'+1 hv {vstep, hstep}')
                             hv_cdinv += 1
 
         bonus_dinv = len([vstep for vstep in range(self.height) if vertical_distances[vertical_step_to_step[vstep]] < 0
@@ -1062,66 +1093,75 @@ class LatticePath(ClonableIntArray):
     #     #     path_latex_options['tstat'] = self.parent().options.latex_tstat
     #     return path_latex_options
 
-    # def _latex_(self):
+    def _latex_(self):
 
-    #     latex.add_package_to_preamble_if_available('tikz')
-    #     latex_options = self.latex_options()
-    #     color = latex_options['color']
-    #     line_width = latex_options['line width']
-    #     scale = latex_options['tikz_scale']
-    #     extra_stuff = ''  # latex_options['extra stuff']
+        latex.add_package_to_preamble_if_available('tikz')
+        latex_options = {
+            'color' : 'blue',
+            'line_width' : 'thick',
+            'tikz_scale' : 1,
+            'diagonal' : True,
+            'show_stats' : False,
+            'qstat' : 'fall_dinv',
+            'tstat' : 'area'
+        }
+        
+        color = latex_options['color']
+        line_width = latex_options['line_width']
+        scale = latex_options['tikz_scale']
+        extra_stuff = ''  # latex_options['extra stuff']
 
-    #     tikz = '\n'
-    #     tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
-    #     tikz += f'    \\draw[draw=none, use as bounding box] (-1,-1) rectangle ({self.width+1},{self.height+1});\n'
-    #     tikz += f'    \\draw[step=1.0, gray!60, thin] (0,0) grid ({self.width},{self.height});\n\n'
+        tikz = '\n'
+        tikz += f'\\begin{{tikzpicture}}[scale={scale}]\n'
+        tikz += f'    \\draw[draw=none, use as bounding box] (-1,-1) rectangle ({self.width+1},{self.height+1});\n'
+        tikz += f'    \\draw[step=1.0, gray!60, thin] (0,0) grid ({self.width},{self.height});\n\n'
 
-    #     if latex_options['diagonal'] == True:
-    #         tikz += '    \\begin{scope}\n'
-    #         tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
+        if latex_options['diagonal'] == True:
+            tikz += '    \\begin{scope}\n'
+            tikz += f'        \\clip (0,0) rectangle ({self.width},{self.height});\n'
 
-    #         tikz += '        \\draw[gray!60, thin] (0,0)'
+            tikz += '        \\draw[gray!60, thin] (0,0)'
 
-    #         for i in range(self.height+1):
-    #             x = Rational(self.main_diagonal()[i] + self.shift)
-    #             tikz += f' -- ({x.numerator()}/{x.denominator()}, {i})'
+            for i in range(self.height+1):
+                x = Rational(self.main_diagonal()[i] + self.shift)
+                tikz += f' -- ({x.numerator()}/{x.denominator()}, {i})'
 
-    #         tikz += ';\n'
-    #         tikz += '    \\end{scope}\n\n'
+            tikz += ';\n'
+            tikz += '    \\end{scope}\n\n'
 
-    #     tikz += f'    \\draw[{color}, line width={line_width}pt] (0,0)'
-    #     labels = ''
+        tikz += f'    \\draw[{color}, line width={line_width}pt] (0,0)'
+        labels = ''
 
-    #     x = y = 0
-    #     for i in self.path:
-    #         if i == 1 and self.labels is not None:
-    #             labels += f'    \\draw ({x+0.5:.1f},{y+0.5:.1f}) circle (0.4cm) node {{${self.labels[y]}$}};\n'
-    #         x += 1 - i
-    #         y += i
-    #         tikz += f' -- ({x},{y})'
-    #     tikz += ';\n\n'
+        x = y = 0
+        for i in self.path:
+            if i == 1 and self.labels is not None:
+                labels += f'    \\draw ({x+0.5:.1f},{y+0.5:.1f}) circle (0.4cm) node {{${self.labels[y]}$}};\n'
+            x += 1 - i
+            y += i
+            tikz += f' -- ({x},{y})'
+        tikz += ';\n\n'
 
-    #     rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
-    #         [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
+        rises = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+            [sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5, i + 0.5) for i in self.rises)
 
-    #     falls = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
-    #         i + 0.5, [j - sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5) for i in self.falls)
+        falls = ''.join('    \\draw (%.1f,%.1f) node {$\\ast$};\n' % (
+            i + 0.5, [j - sum(self.path[:j]) for j in range(self.length)].index(i) - i - 0.5) for i in self.falls)
 
-    #     valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
-    #         [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
+        valleys = ''.join('    \\draw (%.1f,%.1f) node {$\\bullet$};\n' % (
+            [sum(self.path[:j]) for j in range(self.length)].index(i + 1) - (i + 1) - 0.5, (i + 1) - 0.5) for i in self.valleys)
 
-    #     stats = '\n'
+        stats = '\n'
 
-    #     if latex_options['show_stats'] == True:
+        if latex_options['show_stats'] == True:
 
-    #         stats += '      \\node[below left] at (%d,0) {' % (self.width)
-    #         colors = ['blue', 'red', 'green']
+            stats += '      \\node[below left] at (%d,0) {' % (self.width)
+            colors = ['blue', 'red', 'green']
 
-    #         for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
-    #             stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
-    #         stats += '};\n'
+            for color, stat in enumerate([repr(latex_options['qstat']), repr(latex_options['tstat'])]):
+                stats += f' \\color{{{colors[color % 3]}}}{{${getattr(self, stat)()}$}}'
+            stats += '};\n'
 
-    #     return (tikz + labels + rises + falls + valleys + stats + extra_stuff + '\\end{tikzpicture}')
+        return (tikz + labels + rises + falls + valleys + stats + extra_stuff + '\\end{tikzpicture}')
 
 
 class RectangularPath(LatticePath):

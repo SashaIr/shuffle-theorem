@@ -19,7 +19,7 @@ from sage.combinat.sf.macdonald import cmunu
 from sage.misc.all import cached_function, prod
 from sage.rings.all import PolynomialRing, QQ
 
-# Define q, t, u.
+# Define q, t, u, v.
 QQqt = QQ['q', 't', 'u', 'v'].fraction_field()
 QQqt.inject_variables(verbose=False)
 q = QQqt.gens()[0]
@@ -34,7 +34,7 @@ Sym.inject_shorthands(verbose=False)
 # Define the Symmetric Functions algebra over Q(q,t).
 Symqt = SymmetricFunctions(QQqt)
 Symqt.inject_shorthands(verbose=False)
-H = Symqt.macdonald().Ht()
+Ht = Symqt.macdonald().Ht()
 
 # Define the QuasiSymmetric Functions algebra over Q.
 QSym = QuasiSymmetricFunctions(QQ)

@@ -129,4 +129,4 @@ dmypy.json
 *.code-workspace
 
 # Project settings
-LaTeX
+tikz_build/

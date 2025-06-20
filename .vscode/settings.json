@@ -1,0 +1,9 @@
+{
+    "python.analysis.extraPaths": [
+        "wsl.localhost/Arch/usr/lib/python3.12/site-packages/",
+        "wsl.localhost/Ubuntu/usr/lib/python3.12/site-packages/",
+        "wsl.localhost/Arch/usr/lib/python3.12/site-packages/sage/",
+        "wsl.localhost/Ubuntu/usr/lib/python3.12/site-packages/sage/",
+        "./src"
+    ]
+}
