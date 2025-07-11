@@ -820,7 +820,7 @@ class LatticePath(ClonableIntArray):
                     (self.labels is None or self.labels[i] < self.labels[j]) and
                     (vertical_distances[vertical_step_to_step[i]], i) < (vertical_distances[vertical_step_to_step[j]], j)  < (vertical_distances[vertical_step_to_step[i]]+1, i))
 
-        #! This is the one that works.
+        #! This commented block also works.
         # # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
         # hstar_cdinv = 0
         # for hstep in range(self.width):
@@ -830,7 +830,6 @@ class LatticePath(ClonableIntArray):
         #         if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= vertical_distances[horizontal_step_to_step[hstep]] < vertical_distances[horizontal_step_to_step[star_hstep]]:
         #             hstar_cdinv += 1
 
-        #! This is the one that works.
         # # Project vertical steps onto horizontal steps, and check for strict containment.
         # vh_cdinv = 0
         # for vstep in range(self.height):
@@ -845,15 +844,38 @@ class LatticePath(ClonableIntArray):
         #                 if right_endpoint <= vertical_distances[vertical_step_to_step[vstep]] < left_endpoint - 1:
         #                     vh_cdinv += 1
 
-        # Project leftmost points of horizontal steps onto decorated horizontal steps below them.
-        hstar_cdinv = 0
+        # #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
+        # hv_cdinv = 0
+        # for hstep in range(self.width):
+        #     if hstep not in self.falls and (hstep == 0 or hstep-1 not in self.falls):
+        #         for vstep in range(self.height):
+        #             if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
+        #                 if vertical_distances[vertical_step_to_step[vstep]] +  1/self.slope < vertical_distances[horizontal_step_to_step[hstep]] <= vertical_distances[vertical_step_to_step[vstep]] + 1:
+        #                     print(f'+1 hv {vstep, hstep}')
+        #                     hv_cdinv += 1
+
+        #! This block should be equivalent to the previous one.
+        # Project non-decorated horizontal steps onto decorated horizontal steps below them.
+        hstar_pluscdinv = 0
         for star_hstep in self.falls:
             for hstep in range(star_hstep+1, self.width):
                 if hstep not in self.falls:
                     if vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= \
                         vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope < \
                         vertical_distances[horizontal_step_to_step[star_hstep]] - 1/self.slope:
-                        hstar_cdinv += 1
+                        # print(f'+1 hstar {star_hstep, hstep}')
+                        hstar_pluscdinv += 1
+
+        # Project decorated horizontal steps onto non-decorated horizontal steps above them.
+        hstar_minuscdinv = 0
+        for star_hstep in self.falls:
+            for hstep in range(star_hstep+1, self.width):
+                if hstep not in self.falls:
+                    if vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope < \
+                        vertical_distances[horizontal_step_to_step[star_hstep]] - 1 <= \
+                        vertical_distances[horizontal_step_to_step[hstep]] - 1:
+                        # print(f'+1 hstar {star_hstep, hstep}')
+                        hstar_minuscdinv += 1
 
         # Project vertical steps onto horizontal steps, and check for strict containment.
         vh_cdinv = 0
@@ -863,21 +885,28 @@ class LatticePath(ClonableIntArray):
                     if vertical_distances[horizontal_step_to_step[hstep]] - 1/self.slope <= \
                     vertical_distances[vertical_step_to_step[vstep]] < \
                     vertical_distances[horizontal_step_to_step[hstep]] - 1:
+                        # print(f'-1 vh {vstep, hstep}')
                         vh_cdinv += 1
 
         #Project horizontal (non-starred) steps onto vertical steps, and check for strict containment.
         hv_cdinv = 0
         for hstep in range(self.width):
-            if hstep not in self.falls and (hstep == 0 or hstep-1 not in self.falls):
+            if hstep not in self.falls:
                 for vstep in range(self.height):
                     if horizontal_step_to_step[hstep] < vertical_step_to_step[vstep]:
                         if vertical_distances[vertical_step_to_step[vstep]] +  1/self.slope < vertical_distances[horizontal_step_to_step[hstep]] <= vertical_distances[vertical_step_to_step[vstep]] + 1:
+                            # print(f'+1 hv {vstep, hstep}')
                             hv_cdinv += 1
 
-        bonus_dinv = len([vstep for vstep in range(self.height) if vertical_distances[vertical_step_to_step[vstep]] < 0
+        nbonus_dinv = len([hstep for hstep in range(self.width) if hstep in self.falls and vertical_distances[horizontal_step_to_step[hstep]] <= 1
                           and (self.labels is None or self.labels[vstep] > 0)])
 
-        return tdinv - vh_cdinv + hv_cdinv + hstar_cdinv + bonus_dinv
+        #! This should be kept for both blocks
+        bonus_dinv = len([vstep for vstep in range(self.height) if vertical_distances[vertical_step_to_step[vstep]] < 0
+                          and (self.labels is None or self.labels[vstep] > 0)])
+        
+        # return tdinv - vh_cdinv + hv_cdinv + hstar_cdinv + bonus_dinv
+        return tdinv - vh_cdinv + hv_cdinv + hstar_pluscdinv - hstar_minuscdinv + bonus_dinv - nbonus_dinv
 
     # #! This works!
     # def working_dinv(self):
