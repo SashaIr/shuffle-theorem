@@ -195,7 +195,7 @@ def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, d
         # If no value is specified, the grid is assumed to be a square.
         height = width
 
-    # Sets the deafult set of labels to [n].
+    # Sets the default set of labels to [n].
     if labels is None:
         labels = tuple([0] + [1]*(height))
 
@@ -315,7 +315,7 @@ class LatticePath(ClonableIntArray):
         # Returns all the possible labellings of the path, provided that it has no labels and no decorations.
         # It is possible to specify which labels to use, composition[i] being the number of i's appearing.
 
-        # The deafult set of labels is [n].
+        # The default set of labels is [n].
         if composition is None:
             composition = [0] + [1]*self.height
 
