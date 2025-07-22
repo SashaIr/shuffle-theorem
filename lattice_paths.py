@@ -187,6 +187,9 @@ def _generate_lattice_paths(m, n, shift=None, rises=None, falls=None, valleys=No
                         _flag=_flag,
                         _falls_flag=_falls_flag):
                     yield [1] + p
+    else:
+        if shift is None or _flag is True:
+            yield [1]*n
 
 
 def _lattice_paths(width, height=None, shift=None, labelled=True, labels=None, decorated_rises=0, decorated_falls=0, decorated_valleys=0):
