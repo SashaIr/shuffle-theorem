@@ -29,7 +29,7 @@ def _create_latex(latex, filename='latexfile', folder='LaTeX', pdf_viewer=None):
         f.write(latex)
 
     # Compiles the LaTeX file, then deletes the 'Temp' folder, recreates it with all the new files.
-    # If pdf_viewer is set to None, it uses the deafult one.
+    # If pdf_viewer is set to None, it uses the default one.
     os.system(f'pdflatex -interaction=batchmode {folder}/{filename}.tex')
     os.system('rm ' + '-r ' + folder + '/Temp')
     os.system(f'mkdir {folder}/Temp')
